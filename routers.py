@@ -709,6 +709,13 @@ def simulate_payment(billing_id: int = Body(...), db: Session = Depends(get_db),
 
 
 # --- Assistant (Ollama) proxy ---
+ASSISTANT_SYSTEM_PROMPT = (
+    "You are Careflow's hospital operations assistant. Help with navigation, "
+    "administrative workflows, and general health information. Do not diagnose, "
+    "prescribe, or expose patient information. For urgent symptoms, advise the "
+    "user to seek emergency care. Keep answers concise and practical."
+)
+
 @router.post("/assistant/chat")
 def assistant_chat(body: dict = Body(...)):
     """Proxy a simple chat request to a local Ollama HTTP API (http://localhost:11434).
@@ -719,17 +726,18 @@ def assistant_chat(body: dict = Body(...)):
     if requests is None:
         raise HTTPException(status_code=500, detail="Python package 'requests' is required for assistant proxy. Install with `pip install requests`.")
 
-    messages = body.get('messages') or []
-    model = body.get('model', 'llama2')
-
-    # Build a single prompt from messages (simple concat); for richer behavior, send structured payload to Ollama if available
-    prompt = "\n".join([f"{m.get('role','user')}: {m.get('content','')}" for m in messages])
-
-    url = 'http://localhost:11434/api/generate'
-    payload = {"model": model, "prompt": prompt}
+    messages = body.get("messages") or []
+    if not isinstance(messages, list) or not messages:
+        raise HTTPException(status_code=422, detail="At least one chat message is required.")
+    safe_messages = [{"role": item.get("role", "user"), "content": str(item.get("content", "")).strip()} for item in messages if isinstance(item, dict) and str(item.get("content", "")).strip()]
+    if not safe_messages:
+        raise HTTPException(status_code=422, detail="A message cannot be empty.")
+    model = body.get("model") or "llama3.2"
+    url = "http://localhost:11434/api/chat"
+    payload = {"model": model, "messages": [{"role": "system", "content": ASSISTANT_SYSTEM_PROMPT}, *safe_messages], "stream": False}
 
     try:
-        resp = requests.post(url, json=payload, timeout=30)
+        resp = requests.post(url, json=payload, timeout=60)
     except requests.exceptions.RequestException as exc:
         # network / connection error to Ollama
         raise HTTPException(status_code=502, detail=f"Ollama proxy connection error: {str(exc)}")
@@ -740,9 +748,13 @@ def assistant_chat(body: dict = Body(...)):
         raise HTTPException(status_code=502, detail=f"Ollama returned status {resp.status_code}: {text}")
 
     try:
-        return resp.json()
+        result = resp.json()
+        content = result.get("message", {}).get("content", "").strip()
+        if not content:
+            raise ValueError("Ollama returned an empty response")
+        return {"output": content, "model": result.get("model", model)}
     except Exception:
-        return {"raw": resp.text}
+        raise HTTPException(status_code=502, detail="Ollama returned an invalid response.")
 
 
 
@@ -751,12 +763,12 @@ def assistant_health():
     """Check connectivity to local Ollama instance."""
     if requests is None:
         raise HTTPException(status_code=500, detail="Python package 'requests' not installed")
-    url = 'http://localhost:11434/api/models'
+    url = 'http://localhost:11434/api/tags'
     try:
         r = requests.get(url, timeout=5)
         if r.ok:
             try:
-                return {"ok": True, "models": r.json()}
+                return {"ok": True, "models": r.json().get("models", [])}
             except Exception:
                 return {"ok": True, "raw": r.text}
         return {"ok": False, "status": r.status_code, "body": r.text[:1000]}
