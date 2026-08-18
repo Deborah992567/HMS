@@ -7,15 +7,12 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from models import Staff
 from database import get_db
-import hashlib
-import os
 
 # --- Auth ---
 SECRET_KEY = "your_secret_key"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
-REFRESH_TOKEN_EXPIRE_DAYS = 30
-REFRESH_TOKEN_SECRET = os.getenv('REFRESH_TOKEN_SECRET', SECRET_KEY)
+# No refresh tokens: JWT-only authentication
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -32,15 +29,7 @@ def create_access_token(data: dict, expires_delta=None):
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def create_refresh_token(data: dict, expires_delta=None):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS))
-    to_encode.update({"exp": expire, "type": "refresh"})
-    return jwt.encode(to_encode, REFRESH_TOKEN_SECRET, algorithm=ALGORITHM)
 
-
-def hash_token(token: str) -> str:
-    return hashlib.sha256(token.encode()).hexdigest()
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     try:
