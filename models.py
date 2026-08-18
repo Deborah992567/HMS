@@ -102,6 +102,21 @@ class EHR(Base):
     notes = Column(String, nullable=True)
     patient = relationship("Patient", back_populates="ehr_records")
 
+
+# EHR Versioning for audit/history
+class EHRVersion(Base):
+    __tablename__ = "ehr_versions"
+    id = Column(Integer, primary_key=True)
+    ehr_id = Column(Integer, ForeignKey("ehr.id"))
+    patient_id = Column(Integer, ForeignKey("patients.id"))
+    diagnosis = Column(String)
+    medication = Column(String)
+    notes = Column(String, nullable=True)
+    timestamp = Column(DateTime)
+    created_by = Column(Integer)  # staff id
+    anchor_id = Column(String, nullable=True)
+    ehr = relationship("EHR")
+
 # --- Inventory ---
 class Inventory(Base):
     __tablename__ = "inventory"

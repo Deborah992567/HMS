@@ -113,6 +113,23 @@ class EHR(EHRBase):
     class Config:
         orm_mode = True
 
+
+# --- EHR Version ---
+class EHRVersionBase(BaseModel):
+    ehr_id: int
+    patient_id: int
+    diagnosis: str
+    medication: str
+    notes: Optional[str] = None
+
+class EHRVersion(EHRVersionBase):
+    id: int
+    timestamp: datetime
+    created_by: int
+    anchor_id: Optional[str] = None
+    class Config:
+        orm_mode = True
+
 # --- Staff / Role ---
 class RoleBase(BaseModel):
     name: str

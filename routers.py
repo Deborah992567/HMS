@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 from sqlalchemy.orm import Session
 from database import get_db
-from models import Patient, Doctor, Appointment, Billing, EHR, Staff, Role, Inventory, LabTest, Prescription, Consent, DoctorAvailability, Receipt
+from models import Patient, Doctor, Appointment, Billing, EHR, Staff, Role, Inventory, LabTest, Prescription, Consent, DoctorAvailability, Receipt, EHRVersion
 import schemas
 from utils import create_payment_intent, require_roles, get_current_user, verify_password, create_access_token
 from hms_logging import log_action
@@ -228,6 +228,31 @@ def create_ehr(ehr: schemas.EHRCreate, db: Session = Depends(get_db),
         # Do not fail the main request if blockchain recording fails; just continue
         pass
 
+    # create an initial EHR version for audit
+    try:
+        from models import EHRVersion
+        from datetime import datetime as _dt
+        ver = EHRVersion(ehr_id=new_ehr.id, patient_id=new_ehr.patient_id, diagnosis=new_ehr.diagnosis, medication=new_ehr.medication, notes=new_ehr.notes, timestamp=_dt.utcnow(), created_by=user.id)
+        db.add(ver)
+        db.commit()
+        db.refresh(ver)
+        # anchor the block containing the EHR tx if possible
+        try:
+            # mine to include tx
+            last_proof = blockchain.last_block['proof']
+            proof = blockchain.proof_of_work(last_proof)
+            blockchain.new_transaction("0", "miner", 1, data={"reward": "mined"})
+            previous_hash = blockchain.hash(blockchain.last_block)
+            block = blockchain.new_block(proof, previous_hash)
+            anchor = blockchain.anchor_block(block['index'])
+            ver.anchor_id = anchor.get('anchor_id')
+            db.commit()
+            db.refresh(ver)
+        except Exception:
+            pass
+    except Exception:
+        db.rollback()
+
     return new_ehr
 
 
@@ -285,6 +310,25 @@ def update_ehr(ehr_id: int, ehr_in: schemas.EHRCreate, db: Session = Depends(get
     except Exception:
         pass
     return ehr
+
+
+@router.get("/ehr/{ehr_id}/versions", response_model=List[schemas.EHRVersion])
+def list_ehr_versions(ehr_id: int, db: Session = Depends(get_db), user: Staff = Depends(get_current_user)):
+    # only Doctors/Admin or a provider with consent can view versions
+    user_roles = [r.name for r in user.roles]
+    ehr = db.query(EHR).filter(EHR.id == ehr_id).first()
+    if not ehr:
+        raise HTTPException(status_code=404, detail="EHR not found")
+    if 'Admin' in user_roles or 'Doctor' in user_roles:
+        versions = db.query(EHRVersion).filter(EHRVersion.ehr_id == ehr_id).order_by(EHRVersion.timestamp.desc()).all()
+        return versions
+
+    consent = db.query(Consent).filter(Consent.patient_id == ehr.patient_id, Consent.granted_to == f'provider:{user.id}', Consent.revoked == False).first()
+    if consent:
+        versions = db.query(EHRVersion).filter(EHRVersion.ehr_id == ehr_id).order_by(EHRVersion.timestamp.desc()).all()
+        return versions
+
+    raise HTTPException(status_code=403, detail="Access denied: no consent found for versions")
 
 # --- Staff & Roles ---
 @router.post("/roles/", response_model=schemas.Role)
