@@ -16,6 +16,12 @@ from sqlalchemy.orm import Session
 from models import Billing
 from datetime import datetime, timedelta
 from utils import create_access_token
+import json
+
+try:
+    import requests
+except Exception:
+    requests = None
 
 router = APIRouter()
 
@@ -700,6 +706,62 @@ def simulate_payment(billing_id: int = Body(...), db: Session = Depends(get_db),
         pass
 
     return {"message": "Payment simulated and block forged", "block": block, "billing_id": bill.id}
+
+
+# --- Assistant (Ollama) proxy ---
+@router.post("/assistant/chat")
+def assistant_chat(body: dict = Body(...)):
+    """Proxy a simple chat request to a local Ollama HTTP API (http://localhost:11434).
+
+    Body JSON: { "messages": [{"role":"user","content":"..."}, ...], "model": "ollama/modelname" }
+    Returns Ollama's JSON response or an error if Ollama is not reachable.
+    """
+    if requests is None:
+        raise HTTPException(status_code=500, detail="Python package 'requests' is required for assistant proxy. Install with `pip install requests`.")
+
+    messages = body.get('messages') or []
+    model = body.get('model', 'llama2')
+
+    # Build a single prompt from messages (simple concat); for richer behavior, send structured payload to Ollama if available
+    prompt = "\n".join([f"{m.get('role','user')}: {m.get('content','')}" for m in messages])
+
+    url = 'http://localhost:11434/api/generate'
+    payload = {"model": model, "prompt": prompt}
+
+    try:
+        resp = requests.post(url, json=payload, timeout=30)
+    except requests.exceptions.RequestException as exc:
+        # network / connection error to Ollama
+        raise HTTPException(status_code=502, detail=f"Ollama proxy connection error: {str(exc)}")
+
+    # If we get a non-2xx response, return its status and body to aid debugging
+    if not (200 <= resp.status_code < 300):
+        text = resp.text[:1000]
+        raise HTTPException(status_code=502, detail=f"Ollama returned status {resp.status_code}: {text}")
+
+    try:
+        return resp.json()
+    except Exception:
+        return {"raw": resp.text}
+
+
+
+@router.get("/assistant/health")
+def assistant_health():
+    """Check connectivity to local Ollama instance."""
+    if requests is None:
+        raise HTTPException(status_code=500, detail="Python package 'requests' not installed")
+    url = 'http://localhost:11434/api/models'
+    try:
+        r = requests.get(url, timeout=5)
+        if r.ok:
+            try:
+                return {"ok": True, "models": r.json()}
+            except Exception:
+                return {"ok": True, "raw": r.text}
+        return {"ok": False, "status": r.status_code, "body": r.text[:1000]}
+    except requests.exceptions.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"Ollama health check failed: {str(exc)}")
 
 
 # --- Receipts ---
