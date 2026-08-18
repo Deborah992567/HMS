@@ -8,9 +8,9 @@ export default function Toasts({toasts, onRemove}){
   },[toasts])
 
   return (
-    <div className="toasts">
+    <div className="fixed bottom-4 right-4 space-y-2">
       {toasts.map(t=> (
-        <div key={t.id} className={`toast ${t.type||'info'}`}>
+        <div key={t.id} className={`px-4 py-2 rounded shadow ${t.type==='error' ? 'bg-red-600 text-white' : t.type==='success' ? 'bg-green-600 text-white' : 'bg-slate-800 text-white'}`}>
           {t.message}
         </div>
       ))}
