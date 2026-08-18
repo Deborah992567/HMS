@@ -242,3 +242,36 @@ def mine_block():
     previous_hash = blockchain.hash(blockchain.last_block)
     block = blockchain.new_block(proof, previous_hash)
     return {"message": "New Block Forged", "block": block}
+
+
+@router.post("/payments/simulate")
+def simulate_payment(billing_id: int = Body(...), db: Session = Depends(get_db), user: Staff = Depends(require_roles("Reception", "Admin"))):
+    bill = db.query(Billing).filter(Billing.id == billing_id).first()
+    if not bill:
+        raise HTTPException(status_code=404, detail="Billing not found")
+
+    # create payment transaction on blockchain
+    tx_index = blockchain.new_transaction(
+        sender=str(bill.patient_id),
+        recipient="hospital",
+        amount=bill.amount or 0,
+        data={"type": "payment", "billing_id": bill.id}
+    )
+
+    # Immediately mine the block to simulate confirmation
+    last_proof = blockchain.last_block['proof']
+    proof = blockchain.proof_of_work(last_proof)
+    blockchain.new_transaction("0", "miner", 1, data={"reward": "mined"})
+    previous_hash = blockchain.hash(blockchain.last_block)
+    block = blockchain.new_block(proof, previous_hash)
+
+    # Mark billing as paid (simulation)
+    try:
+        bill.status = 'paid'
+        db.commit()
+        db.refresh(bill)
+        log_action(user.id, f"Simulated payment for billing {bill.id} — block {block['index']}")
+    except Exception:
+        pass
+
+    return {"message": "Payment simulated and block forged", "block": block, "billing_id": bill.id}

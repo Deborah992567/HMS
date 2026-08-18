@@ -36,3 +36,15 @@ Next steps you might ask me to do:
 - Improve the UI with React or Svelte and authentication flows.
 - Persist the blockchain to disk or integrate with a production ledger.
 - Add automated tests and CI.
+
+Frontend (React) scaffold
+
+I added a minimal React + Vite frontend in the `frontend/` folder. To run it:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The React dev server runs on port 5173 by default and the backend allows CORS from localhost for development.
