@@ -61,3 +61,19 @@
 2026-08-18 15:44:37,145 - INFO - User 1 performed action: Updated staff 1
 2026-08-18 15:44:37,750 - INFO - User 1 performed action: Created staff 3 - ToDelete
 2026-08-18 15:44:37,763 - INFO - User 1 performed action: Deleted staff 3
+2026-08-18 15:51:24,585 - INFO - User 2 performed action: Created appointment 1 for patient 1 with doctor 1
+2026-08-18 15:51:26,424 - INFO - User 1 performed action: Set availability for doctor 1
+2026-08-18 15:51:26,438 - INFO - User 3 performed action: Created appointment 1 for patient 1 with doctor 1
+2026-08-18 15:51:26,449 - INFO - User 3 performed action: Cancelled appointment 1
+2026-08-18 15:51:27,172 - INFO - User 1 performed action: Created receipt 1 for billing 1
+2026-08-18 15:51:27,809 - INFO - User 1 performed action: Granted consent 1 for patient 1
+2026-08-18 15:51:27,821 - INFO - User 1 performed action: Revoked consent 1
+2026-08-18 15:51:28,411 - INFO - User 1 performed action: Created EHR 1 for patient 1
+2026-08-18 15:51:29,889 - INFO - User 1 performed action: Created EHR 1 for patient 1
+2026-08-18 15:51:31,393 - INFO - User 1 performed action: Created prescription 1 for patient 1
+2026-08-18 15:51:31,404 - INFO - User 2 performed action: Fulfilled prescription 1
+2026-08-18 15:51:32,004 - INFO - User 1 performed action: Created role 2 - Reception
+2026-08-18 15:51:32,572 - INFO - User 1 performed action: Created staff 2 - Receptionist
+2026-08-18 15:51:33,746 - INFO - User 1 performed action: Updated staff 1
+2026-08-18 15:51:34,318 - INFO - User 1 performed action: Created staff 3 - ToDelete
+2026-08-18 15:51:34,330 - INFO - User 1 performed action: Deleted staff 3

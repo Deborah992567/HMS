@@ -177,6 +177,31 @@ def book_patient_appointment(appt: schemas.PatientAppointmentCreate, db: Session
 def list_patient_appointments(db: Session = Depends(get_db), patient: Patient = Depends(get_current_patient)):
     return db.query(Appointment).filter(Appointment.patient_id == patient.id).order_by(Appointment.date.desc()).all()
 
+@router.get("/patient/billing/", response_model=List[schemas.Billing])
+def list_patient_billing(db: Session = Depends(get_db), patient: Patient = Depends(get_current_patient)):
+    """A patient can only see billing records attached to their own profile."""
+    return db.query(Billing).filter(Billing.patient_id == patient.id).order_by(Billing.id.desc()).all()
+
+@router.post("/patient/payments/simulate")
+def pay_patient_bill(billing_id: int = Body(...), db: Session = Depends(get_db), patient: Patient = Depends(get_current_patient)):
+    bill = db.query(Billing).filter(Billing.id == billing_id, Billing.patient_id == patient.id).first()
+    if not bill:
+        raise HTTPException(status_code=404, detail="Billing record not found")
+    if bill.status == "paid":
+        raise HTTPException(status_code=400, detail="This bill has already been paid")
+
+    blockchain.new_transaction(
+        sender=str(patient.id), recipient="hospital", amount=bill.amount or 0,
+        data={"type": "patient_payment", "billing_id": bill.id},
+    )
+    last_proof = blockchain.last_block["proof"]
+    proof = blockchain.proof_of_work(last_proof)
+    blockchain.new_transaction("0", "miner", 1, data={"reward": "mined"})
+    block = blockchain.new_block(proof, blockchain.hash(blockchain.last_block))
+    bill.status = "paid"
+    db.commit()
+    return {"message": "Payment confirmed", "billing_id": bill.id, "block_index": block["index"]}
+
 
 @router.get("/appointments/", response_model=List[schemas.Appointment])
 def list_appointments(patient_id: int = None, doctor_id: int = None, db: Session = Depends(get_db), user: Staff = Depends(get_current_user)):
