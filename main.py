@@ -11,8 +11,12 @@ app = FastAPI(title="Hospital Management System")
 # Namespace API under /api so static files don't conflict with API routes
 app.include_router(router, prefix="/api")
 
-# Serve the single-page UI from the static folder at root (mount last)
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+# Serve built frontend if present (frontend/dist), otherwise fall back to legacy `static/`
+frontend_dist = "frontend/dist"
+if os.path.exists(frontend_dist):
+	app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+else:
+	app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 # Allow CORS for frontend development (adjust origins in production)
 app.add_middleware(

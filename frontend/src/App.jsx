@@ -1,4 +1,9 @@
 import React, {useEffect, useState} from 'react'
+import Header from './components/Header'
+import EHRForm from './components/EHRForm'
+import PrescriptionForm from './components/PrescriptionForm'
+import ConsentForm from './components/ConsentForm'
+import Receipts from './components/Receipts'
 
 const apiBase = import.meta.env.VITE_API_BASE || '/api'
 
@@ -62,17 +67,7 @@ function App(){
 
   return (
     <div className="app">
-      <header>
-        <h1>HMS Dashboard</h1>
-        <nav>
-          <button onClick={()=>setPage('home')}>Home</button>
-          <button onClick={loadPatients}>Patients</button>
-          <button onClick={()=>setPage('blockchain')}>Blockchain</button>
-          <button onClick={()=>setPage('payments')}>Payments</button>
-          <button onClick={()=>setPage('receipts')}>Receipts</button>
-          <button onClick={logout}>Logout</button>
-        </nav>
-      </header>
+      <Header onNav={p=>{ if(p==='patients') loadPatients(); else setPage(p)}} />
 
       {page === 'home' && (
         <section>
@@ -98,6 +93,11 @@ function App(){
         <section>
           <h2>EHR Records</h2>
           <pre>{JSON.stringify(ehrs, null, 2)}</pre>
+          <h3>Create new EHR</h3>
+          <EHRForm onCreate={async (payload)=>{
+            const res = await apiFetch('/ehr/', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)})
+            if(res.ok){ alert('EHR created'); } else { alert('Failed to create EHR') }
+          }} />
         </section>
       )}
 
@@ -108,6 +108,21 @@ function App(){
             <input value={billingId} onChange={e=>setBillingId(e.target.value)} placeholder="Billing ID" />
             <button type="submit">Simulate Payment</button>
           </form>
+          <h3>Create Prescription</h3>
+          <PrescriptionForm onCreate={async (p)=>{
+            const res = await apiFetch('/prescriptions/', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(p)})
+            if(res.ok) alert('Prescription created'); else alert('Failed to create')
+          }} />
+          <h3>Grant Consent</h3>
+          <ConsentForm onCreate={async (c)=>{
+            const res = await apiFetch('/consents/', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(c)})
+            if(res.ok) alert('Consent granted'); else alert('Failed to grant')
+          }} />
+          <h3>Create Receipt</h3>
+          <Receipts onCreate={async (r)=>{
+            const res = await apiFetch('/receipts/', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(r)})
+            if(res.ok) alert('Receipt created'); else alert('Failed')
+          }} />
         </section>
       )}
 
