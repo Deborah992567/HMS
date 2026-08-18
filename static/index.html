@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>HMS — Dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>Hospital Management System — Blockchain</h1>
+      <div class="controls">
+        <button id="viewChain">View Chain</button>
+        <button id="mineBlock">Mine Block</button>
+      </div>
+
+      <section>
+        <h2>Add Transaction</h2>
+        <form id="txForm">
+          <input id="sender" placeholder="Sender" />
+          <input id="recipient" placeholder="Recipient" />
+          <input id="amount" placeholder="Amount (optional)" />
+          <textarea id="data" placeholder='Optional JSON data'></textarea>
+          <button type="submit">Submit Transaction</button>
+        </form>
+      </section>
+
+      <section>
+        <h2>Chain</h2>
+        <pre id="chain"></pre>
+      </section>
+    </div>
+    <script src="/app.js"></script>
+  </body>
+</html>

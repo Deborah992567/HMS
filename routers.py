@@ -8,6 +8,11 @@ from hms_logging import log_action
 
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import func, extract
+from fastapi import Body
+from blockchain import blockchain
+from database import get_db
+from sqlalchemy.orm import Session
+from models import Billing
 
 router = APIRouter()
 
@@ -87,7 +92,19 @@ def create_ehr(ehr: EHRCreate, db: Session = Depends(get_db),
     db.commit()
     db.refresh(new_ehr)
 
+    # Record creation of EHR on the application audit log and the lightweight blockchain
     log_action(user.id, f"Created EHR {new_ehr.id} for patient {ehr.patient_id}")
+    try:
+        blockchain.new_transaction(
+            sender="system",
+            recipient=str(new_ehr.patient_id),
+            amount=0,
+            data={"type": "EHR", "ehr_id": new_ehr.id, "diagnosis": ehr.diagnosis},
+        )
+    except Exception:
+        # Do not fail the main request if blockchain recording fails; just continue
+        pass
+
     return new_ehr
 
 # --- Staff & Roles ---
@@ -185,3 +202,43 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(),
 
     log_action(user.id, "Logged in")
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+# --- Blockchain Endpoints (lightweight) ---
+@router.get("/blockchain/chain")
+def get_chain():
+    return blockchain.get_chain()
+
+
+@router.post("/blockchain/transactions/new")
+def create_transaction(tx: dict = Body(...), db: Session = Depends(get_db), user: Staff = Depends(require_roles("Reception", "Admin"))):
+    data = tx.get('data')
+    index = blockchain.new_transaction(
+        tx.get('sender'), tx.get('recipient'), tx.get('amount', 0), data
+    )
+
+    # If the transaction represents a payment, attempt to mark billing as paid
+    try:
+        if isinstance(data, dict) and data.get('type') == 'payment' and data.get('billing_id'):
+            bill_id = int(data.get('billing_id'))
+            bill = db.query(Billing).filter(Billing.id == bill_id).first()
+            if bill:
+                bill.status = 'paid'
+                db.commit()
+                db.refresh(bill)
+                log_action(user.id, f"Processed payment for billing {bill_id} via blockchain tx")
+    except Exception:
+        pass
+
+    return {"message": f"Transaction will be added to Block {index}"}
+
+
+@router.get("/blockchain/mine")
+def mine_block():
+    last_proof = blockchain.last_block['proof']
+    proof = blockchain.proof_of_work(last_proof)
+    # reward for mining
+    blockchain.new_transaction("0", "miner", 1, data={"reward": "mined"})
+    previous_hash = blockchain.hash(blockchain.last_block)
+    block = blockchain.new_block(proof, previous_hash)
+    return {"message": "New Block Forged", "block": block}
