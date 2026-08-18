@@ -24,6 +24,15 @@ class Blockchain:
 
         # Create the genesis block
         self.new_block(previous_hash='1', proof=100)
+        # anchors file (simulated on-chain anchoring storage)
+        self.anchors_path = os.path.join(os.getcwd(), "anchors.json")
+        # ensure anchors file exists
+        if not os.path.exists(self.anchors_path):
+            try:
+                with open(self.anchors_path, 'w') as f:
+                    json.dump([], f)
+            except Exception:
+                pass
 
     def encrypt_data(self, payload: Any) -> str:
         raw = json.dumps(payload, sort_keys=True).encode()
@@ -98,6 +107,54 @@ class Blockchain:
             current_index += 1
 
         return True
+
+    def _load_anchors(self) -> List[Dict[str, Any]]:
+        try:
+            with open(self.anchors_path, 'r') as f:
+                return json.load(f)
+        except Exception:
+            return []
+
+    def _save_anchor(self, anchor: Dict[str, Any]):
+        anchors = self._load_anchors()
+        anchors.append(anchor)
+        try:
+            with open(self.anchors_path, 'w') as f:
+                json.dump(anchors, f, indent=2)
+        except Exception:
+            # non-fatal
+            pass
+
+    def anchor_block(self, block_index: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Simulate anchoring a block to an external ledger by storing an anchor record
+        locally in `anchors.json`. No external keys or APIs required.
+        """
+        if block_index is None:
+            block = self.last_block
+        else:
+            if block_index - 1 < 0 or block_index > len(self.chain):
+                raise IndexError("block index out of range")
+            block = self.chain[block_index - 1]
+
+        block_hash = self.hash(block)
+        anchor = {
+            "block_index": block['index'],
+            "block_hash": block_hash,
+            "timestamp": time.time(),
+            "anchor_id": hashlib.sha256(f"{block_hash}{time.time()}".encode()).hexdigest()
+        }
+
+        # persist locally
+        self._save_anchor(anchor)
+
+        # also record an on-chain transaction pointing to the anchor (encrypted payload)
+        try:
+            self.new_transaction(sender="system", recipient="anchor", amount=0, data={"type": "anchor", "anchor_id": anchor['anchor_id'], "block_index": block['index'], "block_hash": block_hash})
+        except Exception:
+            pass
+
+        return anchor
 
     def get_chain(self) -> Dict[str, Any]:
         return {'chain': self.chain, 'length': len(self.chain)}

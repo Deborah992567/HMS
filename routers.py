@@ -232,16 +232,38 @@ def create_ehr(ehr: schemas.EHRCreate, db: Session = Depends(get_db),
 
 
 @router.get("/ehr/{ehr_id}", response_model=schemas.EHR)
-def get_ehr(ehr_id: int, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Doctor", "Admin", "Reception"))):
+def get_ehr(ehr_id: int, db: Session = Depends(get_db), user: Staff = Depends(get_current_user)):
     ehr = db.query(EHR).filter(EHR.id == ehr_id).first()
-    if not ehr: raise HTTPException(status_code=404, detail="EHR not found")
-    return ehr
+    if not ehr:
+        raise HTTPException(status_code=404, detail="EHR not found")
+
+    # Enforce consent: Admins and Doctors may view EHRs by role; others require explicit consent
+    user_roles = [r.name for r in user.roles]
+    if 'Admin' in user_roles or 'Doctor' in user_roles:
+        return ehr
+
+    # Check for explicit consent granted to this staff member for the patient
+    consent = db.query(Consent).filter(Consent.patient_id == ehr.patient_id, Consent.granted_to == f'provider:{user.id}', Consent.revoked == False).first()
+    if consent:
+        return ehr
+
+    raise HTTPException(status_code=403, detail="Access denied: no consent found")
 
 
 @router.get("/patients/{patient_id}/ehr", response_model=List[schemas.EHR])
-def get_patient_ehrs(patient_id: int, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Doctor", "Admin", "Reception"))):
-    records = db.query(EHR).filter(EHR.patient_id == patient_id).all()
-    return records
+def get_patient_ehrs(patient_id: int, db: Session = Depends(get_db), user: Staff = Depends(get_current_user)):
+    # Enforce consent similar to single EHR: Admins and Doctors may view; others require provider-specific consent
+    user_roles = [r.name for r in user.roles]
+    if 'Admin' in user_roles or 'Doctor' in user_roles:
+        records = db.query(EHR).filter(EHR.patient_id == patient_id).all()
+        return records
+
+    consent = db.query(Consent).filter(Consent.patient_id == patient_id, Consent.granted_to == f'provider:{user.id}', Consent.revoked == False).first()
+    if consent:
+        records = db.query(EHR).filter(EHR.patient_id == patient_id).all()
+        return records
+
+    raise HTTPException(status_code=403, detail="Access denied: no consent found for patient")
 
 
 @router.put("/ehr/{ehr_id}", response_model=schemas.EHR)
@@ -494,6 +516,21 @@ def mine_block():
     previous_hash = blockchain.hash(blockchain.last_block)
     block = blockchain.new_block(proof, previous_hash)
     return {"message": "New Block Forged", "block": block}
+
+
+@router.post("/blockchain/anchor")
+def anchor_block(block_index: int = Body(None), db: Session = Depends(get_db), user: Staff = Depends(require_roles("Admin", "Reception"))):
+    """Simulate anchoring of a block to an external ledger by storing an anchor locally.
+    Optionally provide `block_index`; otherwise the latest block is anchored."""
+    try:
+        anchor = blockchain.anchor_block(block_index)
+    except IndexError:
+        raise HTTPException(status_code=400, detail="Block index out of range")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    log_action(user.id, f"Anchored block {anchor['block_index']} with anchor id {anchor['anchor_id']}")
+    return anchor
 
 
 @router.post("/payments/simulate")
