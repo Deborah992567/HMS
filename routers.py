@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from typing import List
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Patient, Doctor, Appointment, Billing, EHR, Staff, Role, Inventory, LabTest
@@ -155,6 +156,54 @@ def create_staff(staff: schemas.StaffCreate, db: Session = Depends(get_db),
 
     log_action(user.id, f"Created staff {new_staff.id} - {new_staff.name}")
     return new_staff
+
+
+# --- Doctors CRUD ---
+@router.post("/doctors/", response_model=schemas.Doctor)
+def create_doctor(doctor: schemas.DoctorCreate, db: Session = Depends(get_db),
+                  user: Staff = Depends(require_roles("Admin"))):
+    new_doc = Doctor(name=doctor.name, specialty=doctor.specialty)
+    db.add(new_doc)
+    db.commit()
+    db.refresh(new_doc)
+
+    log_action(user.id, f"Created doctor {new_doc.id} - {new_doc.name}")
+    return new_doc
+
+
+@router.get("/doctors/", response_model=List[schemas.Doctor])
+def list_doctors(db: Session = Depends(get_db), user: Staff = Depends(require_roles("Reception", "Doctor", "Admin"))):
+    docs = db.query(Doctor).all()
+    return docs
+
+
+@router.get("/doctors/{doc_id}", response_model=schemas.Doctor)
+def get_doctor(doc_id: int, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Reception", "Doctor", "Admin"))):
+    doc = db.query(Doctor).filter(Doctor.id == doc_id).first()
+    if not doc: raise HTTPException(status_code=404, detail="Doctor not found")
+    return doc
+
+
+@router.put("/doctors/{doc_id}", response_model=schemas.Doctor)
+def update_doctor(doc_id: int, doctor: schemas.DoctorCreate, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Admin"))):
+    doc = db.query(Doctor).filter(Doctor.id == doc_id).first()
+    if not doc: raise HTTPException(status_code=404, detail="Doctor not found")
+    doc.name = doctor.name
+    doc.specialty = doctor.specialty
+    db.commit()
+    db.refresh(doc)
+    log_action(user.id, f"Updated doctor {doc_id}")
+    return doc
+
+
+@router.delete("/doctors/{doc_id}")
+def delete_doctor(doc_id: int, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Admin"))):
+    doc = db.query(Doctor).filter(Doctor.id == doc_id).first()
+    if not doc: raise HTTPException(status_code=404, detail="Doctor not found")
+    db.delete(doc)
+    db.commit()
+    log_action(user.id, f"Deleted doctor {doc_id}")
+    return {"message": "deleted"}
 
 # --- Inventory ---
 @router.post("/inventory/", response_model=schemas.Inventory)

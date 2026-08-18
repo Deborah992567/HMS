@@ -41,6 +41,19 @@ class Appointment(AppointmentBase):
     class Config:
         orm_mode = True
 
+# --- Doctor ---
+class DoctorBase(BaseModel):
+    name: str
+    specialty: Optional[str] = None
+
+class DoctorCreate(DoctorBase):
+    pass
+
+class Doctor(DoctorBase):
+    id: int
+    class Config:
+        orm_mode = True
+
 # --- Billing ---
 class BillingBase(BaseModel):
     patient_id: int
