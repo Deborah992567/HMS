@@ -25,3 +25,5 @@
 2026-08-18 13:03:17,247 - INFO - User 1 performed action: Created EHR 1 for patient 1
 2026-08-18 13:03:17,843 - INFO - User 1 performed action: Created prescription 1 for patient 1
 2026-08-18 13:03:17,854 - INFO - User 2 performed action: Fulfilled prescription 1
+2026-08-18 13:06:59,305 - INFO - User 1 performed action: Created receipt 1 for billing 1
+2026-08-18 13:07:23,216 - INFO - User 1 performed action: Created receipt 1 for billing 1

@@ -83,6 +83,21 @@ class Billing(BillingBase):
     class Config:
         orm_mode = True
 
+# --- Receipts ---
+class ReceiptBase(BaseModel):
+    billing_id: int
+    amount: float
+
+class ReceiptCreate(ReceiptBase):
+    pass
+
+class Receipt(ReceiptBase):
+    id: int
+    timestamp: datetime
+    anchor_id: Optional[str] = None
+    class Config:
+        orm_mode = True
+
 # --- EHR ---
 class EHRBase(BaseModel):
     patient_id: int

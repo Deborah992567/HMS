@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 from sqlalchemy.orm import Session
 from database import get_db
-from models import Patient, Doctor, Appointment, Billing, EHR, Staff, Role, Inventory, LabTest, Prescription, Consent, DoctorAvailability
+from models import Patient, Doctor, Appointment, Billing, EHR, Staff, Role, Inventory, LabTest, Prescription, Consent, DoctorAvailability, Receipt
 import schemas
 from utils import create_payment_intent, require_roles, get_current_user, verify_password, create_access_token
 from hms_logging import log_action
@@ -564,3 +564,54 @@ def simulate_payment(billing_id: int = Body(...), db: Session = Depends(get_db),
         pass
 
     return {"message": "Payment simulated and block forged", "block": block, "billing_id": bill.id}
+
+
+# --- Receipts ---
+@router.post("/receipts/", response_model=schemas.Receipt)
+def create_receipt(r: schemas.ReceiptCreate, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Reception", "Admin"))):
+    bill = db.query(Billing).filter(Billing.id == r.billing_id).first()
+    if not bill:
+        raise HTTPException(status_code=404, detail="Billing not found")
+
+    # create receipt
+    from datetime import datetime as _dt
+    receipt = None
+    try:
+        from models import Receipt
+        receipt = Receipt(billing_id=r.billing_id, amount=r.amount, timestamp=_dt.utcnow())
+        db.add(receipt)
+        bill.status = 'paid'
+        db.commit()
+        db.refresh(receipt)
+
+        # record receipt on chain and anchor
+        try:
+            blockchain.new_transaction(sender=str(bill.patient_id), recipient='hospital', amount=r.amount, data={"type": "receipt", "receipt_id": receipt.id, "billing_id": bill.id})
+            # mine instantly for simulation
+            last_proof = blockchain.last_block['proof']
+            proof = blockchain.proof_of_work(last_proof)
+            blockchain.new_transaction("0", "miner", 1, data={"reward": "mined"})
+            previous_hash = blockchain.hash(blockchain.last_block)
+            block = blockchain.new_block(proof, previous_hash)
+            anchor = blockchain.anchor_block(block['index'])
+            receipt.anchor_id = anchor.get('anchor_id')
+            db.commit()
+            db.refresh(receipt)
+        except Exception:
+            # non-fatal
+            pass
+
+        log_action(user.id, f"Created receipt {receipt.id} for billing {bill.id}")
+    except Exception:
+        db.rollback()
+        raise
+
+    return receipt
+
+
+@router.get("/receipts/", response_model=List[schemas.Receipt])
+def list_receipts(billing_id: int = None, db: Session = Depends(get_db), user: Staff = Depends(get_current_user)):
+    q = db.query(Receipt)
+    if billing_id:
+        q = q.filter(Receipt.billing_id == billing_id)
+    return q.all()

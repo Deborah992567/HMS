@@ -81,6 +81,17 @@ class Billing(Base):
     status = Column(String, default="pending")  # pending, insurance_pending, paid, rejected
     patient = relationship("Patient", back_populates="bills")
 
+
+# --- Receipts ---
+class Receipt(Base):
+    __tablename__ = "receipts"
+    id = Column(Integer, primary_key=True)
+    billing_id = Column(Integer, ForeignKey("billing.id"))
+    amount = Column(Float)
+    timestamp = Column(DateTime)
+    anchor_id = Column(String, nullable=True)
+    billing = relationship("Billing")
+
 # --- EHR ---
 class EHR(Base):
     __tablename__ = "ehr"
