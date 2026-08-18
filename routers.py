@@ -498,6 +498,21 @@ def create_service(service: schemas.ServiceCreate, db: Session = Depends(get_db)
     db.add(new_service); db.commit(); db.refresh(new_service)
     return new_service
 
+@router.put("/services/{service_id}", response_model=schemas.Service)
+def update_service(service_id: int, service: schemas.ServiceCreate, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Admin"))):
+    current = db.query(Service).filter(Service.id == service_id).first()
+    if not current: raise HTTPException(status_code=404, detail="Service not found")
+    current.name, current.description, current.duration_minutes = service.name, service.description, service.duration_minutes
+    db.commit(); db.refresh(current)
+    return current
+
+@router.delete("/services/{service_id}")
+def delete_service(service_id: int, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Admin"))):
+    current = db.query(Service).filter(Service.id == service_id).first()
+    if not current: raise HTTPException(status_code=404, detail="Service not found")
+    db.delete(current); db.commit()
+    return {"message": "deleted"}
+
 
 @router.get("/doctors/{doc_id}", response_model=schemas.Doctor)
 def get_doctor(doc_id: int, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Reception", "Doctor", "Admin"))):
