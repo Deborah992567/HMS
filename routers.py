@@ -13,6 +13,10 @@ from blockchain import blockchain
 from database import get_db
 from sqlalchemy.orm import Session
 from models import Billing
+from models import RefreshToken
+import hashlib
+from datetime import datetime, timedelta
+from utils import create_refresh_token, hash_token, REFRESH_TOKEN_EXPIRE_DAYS
 
 router = APIRouter()
 
@@ -200,8 +204,59 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(),
     roles = [r.name for r in user.roles]
     access_token = create_access_token({"user_id": user.id, "roles": roles})
 
+    # create refresh token and store its hash
+    refresh_token = create_refresh_token({"user_id": user.id, "roles": roles})
+    token_hash = hash_token(refresh_token)
+    now = datetime.utcnow()
+    expires_at = now + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    rt = RefreshToken(token_hash=token_hash, user_id=user.id, created_at=now, expires_at=expires_at, revoked=False)
+    db.add(rt)
+    db.commit()
+
     log_action(user.id, "Logged in")
+    return {"access_token": access_token, "token_type": "bearer", "refresh_token": refresh_token}
+
+
+@router.post("/token/refresh")
+def refresh_access_token(refresh_token: str = Body(...), db: Session = Depends(get_db)):
+    # validate JWT
+    try:
+        payload = jwt.decode(refresh_token, REFRESH_TOKEN_SECRET, algorithms=[ALGORITHM])
+        if payload.get('type') != 'refresh':
+            raise HTTPException(status_code=401, detail="Invalid token type")
+        user_id = payload.get('user_id')
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    # verify stored token hash and not revoked
+    token_hash = hash_token(refresh_token)
+    rt = db.query(RefreshToken).filter(RefreshToken.token_hash == token_hash, RefreshToken.user_id == user_id).first()
+    if not rt or rt.revoked:
+        raise HTTPException(status_code=401, detail="Refresh token revoked or not found")
+
+    # issue new access token
+    user = db.query(Staff).filter(Staff.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    roles = [r.name for r in user.roles]
+    access_token = create_access_token({"user_id": user.id, "roles": roles})
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.post("/token/logout")
+def logout(refresh_token: str = Body(...), db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(refresh_token, REFRESH_TOKEN_SECRET, algorithms=[ALGORITHM])
+        user_id = payload.get('user_id')
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    token_hash = hash_token(refresh_token)
+    rt = db.query(RefreshToken).filter(RefreshToken.token_hash == token_hash, RefreshToken.user_id == user_id).first()
+    if rt:
+        rt.revoked = True
+        db.commit()
+    return {"message": "Logged out"}
 
 
 # --- Blockchain Endpoints (lightweight) ---
