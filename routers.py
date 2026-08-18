@@ -17,6 +17,7 @@ from models import Billing
 from datetime import datetime, timedelta
 from utils import create_access_token
 import json
+import hashlib
 
 try:
     import requests
@@ -142,6 +143,22 @@ def list_patients(db: Session = Depends(get_db), user: Staff = Depends(require_r
     """Return the patient directory for authenticated clinical staff."""
     return db.query(Patient).order_by(Patient.name.asc()).all()
 
+
+@router.get("/patients/{patient_id}/timeline")
+def get_patient_timeline(patient_id: int, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Doctor", "Admin"))):
+    """Return a staff-only, single-patient operational timeline."""
+    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    return {
+        "patient": {"id": patient.id, "name": patient.name, "email": patient.email},
+        "ehrs": db.query(EHR).filter(EHR.patient_id == patient_id).order_by(EHR.id.desc()).all(),
+        "appointments": db.query(Appointment).filter(Appointment.patient_id == patient_id).order_by(Appointment.date.desc()).all(),
+        "prescriptions": db.query(Prescription).filter(Prescription.patient_id == patient_id).order_by(Prescription.id.desc()).all(),
+        "billing": db.query(Billing).filter(Billing.patient_id == patient_id).order_by(Billing.id.desc()).all(),
+        "consents": db.query(Consent).filter(Consent.patient_id == patient_id).order_by(Consent.timestamp.desc()).all(),
+    }
+
 # --- Appointments ---
 def is_doctor_available(db: Session, doctor_id: int, date):
     return not db.query(Appointment).filter(Appointment.doctor_id==doctor_id, Appointment.date==date).first()
@@ -165,7 +182,21 @@ def create_appointment(appt: schemas.AppointmentCreate, db: Session = Depends(ge
     log_action(user.id, f"Created appointment {new_appt.id} for patient {appt.patient_id} with doctor {appt.doctor_id}")
     return new_appt
 
-@router.post("/patient/appointments/", response_model=schemas.Appointment)
+APPOINTMENT_BOOKING_FEE = 50.00
+
+
+def record_simulated_payment(bill: Billing, payment_type: str):
+    """Confirm a demo payment and place only encrypted payment metadata on-chain."""
+    payment_reference = hashlib.sha256(f"careflow:{bill.patient_id}:{bill.id}".encode()).hexdigest()
+    blockchain.new_transaction(
+        sender=f"patient:{payment_reference[:16]}", recipient="hospital", amount=bill.amount or 0,
+        data={"type": payment_type, "billing_id": bill.id, "payment_reference": payment_reference},
+    )
+    block = blockchain.mine_block()
+    return block, payment_reference
+
+
+@router.post("/patient/appointments/", response_model=schemas.PatientAppointmentBooking)
 def book_patient_appointment(appt: schemas.PatientAppointmentCreate, db: Session = Depends(get_db), patient: Patient = Depends(get_current_patient)):
     if not db.query(Doctor).filter(Doctor.id == appt.doctor_id).first():
         raise HTTPException(status_code=404, detail="Doctor not found")
@@ -176,8 +207,13 @@ def book_patient_appointment(appt: schemas.PatientAppointmentCreate, db: Session
     if not is_patient_available(db, patient.id, appt.date):
         raise HTTPException(status_code=400, detail="You already have an appointment at this time")
     booking = Appointment(patient_id=patient.id, doctor_id=appt.doctor_id, service_id=appt.service_id, date=appt.date)
-    db.add(booking); db.commit(); db.refresh(booking)
-    return booking
+    db.add(booking)
+    db.flush()
+    bill = Billing(patient_id=patient.id, appointment_id=booking.id, amount=APPOINTMENT_BOOKING_FEE,
+                   status="pending", description="Appointment booking fee")
+    db.add(bill)
+    db.commit(); db.refresh(booking); db.refresh(bill)
+    return {**schemas.Appointment.from_orm(booking).dict(), "billing": bill}
 
 @router.get("/patient/appointments/", response_model=List[schemas.Appointment])
 def list_patient_appointments(db: Session = Depends(get_db), patient: Patient = Depends(get_current_patient)):
@@ -196,17 +232,10 @@ def pay_patient_bill(billing_id: int = Body(...), db: Session = Depends(get_db),
     if bill.status == "paid":
         raise HTTPException(status_code=400, detail="This bill has already been paid")
 
-    blockchain.new_transaction(
-        sender=str(patient.id), recipient="hospital", amount=bill.amount or 0,
-        data={"type": "patient_payment", "billing_id": bill.id},
-    )
-    last_proof = blockchain.last_block["proof"]
-    proof = blockchain.proof_of_work(last_proof)
-    blockchain.new_transaction("0", "miner", 1, data={"reward": "mined"})
-    block = blockchain.new_block(proof, blockchain.hash(blockchain.last_block))
+    block, payment_reference = record_simulated_payment(bill, "simulated_appointment_payment")
     bill.status = "paid"
     db.commit()
-    return {"message": "Payment confirmed", "billing_id": bill.id, "block_index": block["index"]}
+    return {"message": "Simulated payment confirmed and encrypted payment reference recorded", "billing_id": bill.id, "block_index": block["index"], "payment_reference": payment_reference[:12]}
 
 
 @router.get("/appointments/", response_model=List[schemas.Appointment])
@@ -734,6 +763,17 @@ def assistant_chat(body: dict = Body(...)):
     safe_messages = [{"role": item.get("role", "user"), "content": str(item.get("content", "")).strip()} for item in messages if isinstance(item, dict) and str(item.get("content", "")).strip()]
     if not safe_messages:
         raise HTTPException(status_code=422, detail="A message cannot be empty.")
+
+    # This is product identity, not a generative answer: keep it exact and
+    # independent of the currently selected local model.
+    latest_message = safe_messages[-1]["content"].lower().strip(" ?!.")
+    identity_questions = {
+        "whose ai assistant are you", "whose assistant are you", "who are you",
+        "what is your name", "what are you called", "who do you belong to",
+    }
+    if latest_message in identity_questions or "whose ai assistant" in latest_message:
+        return {"output": "Careflow Assistant."}
+
     model = body.get("model") or "llama3.2"
     url = "http://localhost:11434/api/chat"
     payload = {"model": model, "messages": [{"role": "system", "content": ASSISTANT_SYSTEM_PROMPT}, *safe_messages], "stream": False}

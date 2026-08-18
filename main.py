@@ -26,6 +26,7 @@ def create_database_tables():
     upgrades = {
         "patients": {"hashed_password": "VARCHAR"},
         "appointments": {"service_id": "INTEGER"},
+        "billing": {"appointment_id": "INTEGER", "description": "VARCHAR"},
     }
     with engine.begin() as connection:
         for table, columns in upgrades.items():

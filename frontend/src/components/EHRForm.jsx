@@ -1,8 +1,8 @@
 import React, {useState} from 'react'
 import FormField from './FormField'
 
-export default function EHRForm({onCreate}){
-  const [patientId, setPatientId] = useState('')
+export default function EHRForm({onCreate, patientId: selectedPatientId}){
+  const [patientId, setPatientId] = useState(selectedPatientId ? String(selectedPatientId) : '')
   const [diagnosis, setDiagnosis] = useState('')
   const [medication, setMedication] = useState('')
   const [notes, setNotes] = useState('')
@@ -21,7 +21,7 @@ export default function EHRForm({onCreate}){
     setErrors(eobj)
     if(Object.keys(eobj).length) return
     onCreate({patient_id: Number(patientId), diagnosis, medication, notes})
-    setPatientId(''); setDiagnosis(''); setMedication(''); setNotes('')
+    if (!selectedPatientId) setPatientId(''); setDiagnosis(''); setMedication(''); setNotes('')
   }
 
   return (

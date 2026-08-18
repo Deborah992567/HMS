@@ -94,6 +94,8 @@ class BillingBase(BaseModel):
     patient_id: int
     amount: float
     status: Optional[str] = "pending"
+    appointment_id: Optional[int] = None
+    description: Optional[str] = None
 
 class BillingCreate(BillingBase):
     pass
@@ -102,6 +104,9 @@ class Billing(BillingBase):
     id: int
     class Config:
         orm_mode = True
+
+class PatientAppointmentBooking(Appointment):
+    billing: Billing
 
 # --- Receipts ---
 class ReceiptBase(BaseModel):

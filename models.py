@@ -89,6 +89,8 @@ class Billing(Base):
     patient_id = Column(Integer, ForeignKey("patients.id"))
     amount = Column(Float)
     status = Column(String, default="pending")  # pending, insurance_pending, paid, rejected
+    appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=True)
+    description = Column(String, nullable=True)
     patient = relationship("Patient", back_populates="bills")
 
 
