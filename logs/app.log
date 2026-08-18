@@ -13,3 +13,6 @@
 2026-08-18 12:51:53,662 - INFO - User 1 performed action: Set availability for doctor 1
 2026-08-18 12:51:53,670 - INFO - User 3 performed action: Created appointment 1 for patient 1 with doctor 1
 2026-08-18 12:51:53,677 - INFO - User 3 performed action: Cancelled appointment 1
+2026-08-18 12:55:18,941 - INFO - User 1 performed action: Created EHR 1 for patient 1
+2026-08-18 12:55:54,566 - INFO - User 1 performed action: Created EHR 1 for patient 1
+2026-08-18 12:56:15,648 - INFO - User 1 performed action: Created EHR 1 for patient 1

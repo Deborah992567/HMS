@@ -168,6 +168,40 @@ def create_ehr(ehr: schemas.EHRCreate, db: Session = Depends(get_db),
 
     return new_ehr
 
+
+@router.get("/ehr/{ehr_id}", response_model=schemas.EHR)
+def get_ehr(ehr_id: int, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Doctor", "Admin", "Reception"))):
+    ehr = db.query(EHR).filter(EHR.id == ehr_id).first()
+    if not ehr: raise HTTPException(status_code=404, detail="EHR not found")
+    return ehr
+
+
+@router.get("/patients/{patient_id}/ehr", response_model=List[schemas.EHR])
+def get_patient_ehrs(patient_id: int, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Doctor", "Admin", "Reception"))):
+    records = db.query(EHR).filter(EHR.patient_id == patient_id).all()
+    return records
+
+
+@router.put("/ehr/{ehr_id}", response_model=schemas.EHR)
+def update_ehr(ehr_id: int, ehr_in: schemas.EHRCreate, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Doctor"))):
+    ehr = db.query(EHR).filter(EHR.id == ehr_id).first()
+    if not ehr: raise HTTPException(status_code=404, detail="EHR not found")
+    ehr.diagnosis = ehr_in.diagnosis
+    ehr.medication = ehr_in.medication
+    ehr.notes = ehr_in.notes
+    db.commit()
+    db.refresh(ehr)
+    try:
+        blockchain.new_transaction(
+            sender=str(user.id),
+            recipient=str(ehr.patient_id),
+            amount=0,
+            data={"type": "EHR_update", "ehr_id": ehr.id}
+        )
+    except Exception:
+        pass
+    return ehr
+
 # --- Staff & Roles ---
 @router.post("/roles/", response_model=schemas.Role)
 def create_role(role: schemas.RoleCreate, db: Session = Depends(get_db),
