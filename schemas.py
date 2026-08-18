@@ -103,6 +103,12 @@ class StaffCreate(StaffBase):
     role_ids: List[int] = []
     password: str
 
+class StaffUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    role_ids: Optional[List[int]] = None
+    password: Optional[str] = None
+
 class Staff(StaffBase):
     id: int
     roles: List[Role] = []

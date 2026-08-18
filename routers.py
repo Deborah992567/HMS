@@ -158,6 +158,50 @@ def create_staff(staff: schemas.StaffCreate, db: Session = Depends(get_db),
     return new_staff
 
 
+# Staff management endpoints
+@router.get("/staff/", response_model=List[schemas.Staff])
+def list_staff(db: Session = Depends(get_db), user: Staff = Depends(require_roles("Admin"))):
+    staff_members = db.query(Staff).all()
+    return staff_members
+
+
+@router.get("/staff/{staff_id}", response_model=schemas.Staff)
+def get_staff(staff_id: int, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Admin"))):
+    s = db.query(Staff).filter(Staff.id == staff_id).first()
+    if not s: raise HTTPException(status_code=404, detail="Staff not found")
+    return s
+
+
+@router.put("/staff/{staff_id}", response_model=schemas.Staff)
+def update_staff(staff_id: int, staff_update: schemas.StaffUpdate, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Admin"))):
+    s = db.query(Staff).filter(Staff.id == staff_id).first()
+    if not s: raise HTTPException(status_code=404, detail="Staff not found")
+    if staff_update.name is not None:
+        s.name = staff_update.name
+    if staff_update.email is not None:
+        s.email = staff_update.email
+    if staff_update.role_ids is not None:
+        roles = db.query(Role).filter(Role.id.in_(staff_update.role_ids)).all()
+        s.roles = roles
+    if staff_update.password:
+        from utils import get_password_hash
+        s.hashed_password = get_password_hash(staff_update.password)
+    db.commit()
+    db.refresh(s)
+    log_action(user.id, f"Updated staff {staff_id}")
+    return s
+
+
+@router.delete("/staff/{staff_id}")
+def delete_staff(staff_id: int, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Admin"))):
+    s = db.query(Staff).filter(Staff.id == staff_id).first()
+    if not s: raise HTTPException(status_code=404, detail="Staff not found")
+    db.delete(s)
+    db.commit()
+    log_action(user.id, f"Deleted staff {staff_id}")
+    return {"message": "deleted"}
+
+
 # --- Doctors CRUD ---
 @router.post("/doctors/", response_model=schemas.Doctor)
 def create_doctor(doctor: schemas.DoctorCreate, db: Session = Depends(get_db),
