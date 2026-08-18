@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Patient, Doctor, Appointment, Billing, EHR, Staff, Role, Inventory, LabTest
-from schemas import *
+import schemas
 from utils import create_payment_intent, require_roles, get_current_user, verify_password, create_access_token
 from hms_logging import log_action
 
@@ -19,8 +19,8 @@ from utils import create_access_token
 router = APIRouter()
 
 # --- Patients ---
-@router.post("/patients/", response_model=Patient)
-def create_patient(patient: PatientCreate, db: Session = Depends(get_db),
+@router.post("/patients/", response_model=schemas.Patient)
+def create_patient(patient: schemas.PatientCreate, db: Session = Depends(get_db),
                    user: Staff = Depends(require_roles("Reception", "Admin"))):
     new_patient = Patient(name=patient.name, email=patient.email)
     db.add(new_patient)
@@ -32,8 +32,8 @@ def create_patient(patient: PatientCreate, db: Session = Depends(get_db),
 
 
 # Public patient registration
-@router.post("/patients/register", response_model=Patient)
-def register_patient(patient: PatientCreate, db: Session = Depends(get_db)):
+@router.post("/patients/register", response_model=schemas.Patient)
+def register_patient(patient: schemas.PatientCreate, db: Session = Depends(get_db)):
     new_patient = Patient(name=patient.name, email=patient.email)
     # handle basic insurance creation if provided
     if patient.insurance_provider or patient.insurance_policy_number:
@@ -56,8 +56,8 @@ def is_doctor_available(db: Session, doctor_id: int, date):
 def is_patient_available(db: Session, patient_id: int, date):
     return not db.query(Appointment).filter(Appointment.patient_id==patient_id, Appointment.date==date).first()
 
-@router.post("/appointments/", response_model=Appointment)
-def create_appointment(appt: AppointmentCreate, db: Session = Depends(get_db),
+@router.post("/appointments/", response_model=schemas.Appointment)
+def create_appointment(appt: schemas.AppointmentCreate, db: Session = Depends(get_db),
                        user: Staff = Depends(require_roles("Reception", "Doctor"))):
     if not is_doctor_available(db, appt.doctor_id, appt.date):
         raise HTTPException(status_code=400, detail="Doctor not available at this time")
@@ -73,8 +73,8 @@ def create_appointment(appt: AppointmentCreate, db: Session = Depends(get_db),
     return new_appt
 
 # --- Billing ---
-@router.post("/billing/", response_model=Billing)
-def create_bill(bill: BillingCreate, db: Session = Depends(get_db),
+@router.post("/billing/", response_model=schemas.Billing)
+def create_bill(bill: schemas.BillingCreate, db: Session = Depends(get_db),
                 user: Staff = Depends(require_roles("Reception", "Admin"))):
     new_bill = Billing(**bill.dict())
     db.add(new_bill)
@@ -105,8 +105,8 @@ def submit_insurance_claim(bill_id: int, db: Session = Depends(get_db),
     return bill
 
 # --- EHR ---
-@router.post("/ehr/", response_model=EHR)
-def create_ehr(ehr: EHRCreate, db: Session = Depends(get_db),
+@router.post("/ehr/", response_model=schemas.EHR)
+def create_ehr(ehr: schemas.EHRCreate, db: Session = Depends(get_db),
                user: Staff = Depends(require_roles("Doctor"))):
     new_ehr = EHR(**ehr.dict())
     db.add(new_ehr)
@@ -129,8 +129,8 @@ def create_ehr(ehr: EHRCreate, db: Session = Depends(get_db),
     return new_ehr
 
 # --- Staff & Roles ---
-@router.post("/roles/", response_model=Role)
-def create_role(role: RoleCreate, db: Session = Depends(get_db),
+@router.post("/roles/", response_model=schemas.Role)
+def create_role(role: schemas.RoleCreate, db: Session = Depends(get_db),
                 user: Staff = Depends(require_roles("Admin"))):
     new_role = Role(**role.dict())
     db.add(new_role)
@@ -140,8 +140,8 @@ def create_role(role: RoleCreate, db: Session = Depends(get_db),
     log_action(user.id, f"Created role {new_role.id} - {new_role.name}")
     return new_role
 
-@router.post("/staff/", response_model=Staff)
-def create_staff(staff: StaffCreate, db: Session = Depends(get_db),
+@router.post("/staff/", response_model=schemas.Staff)
+def create_staff(staff: schemas.StaffCreate, db: Session = Depends(get_db),
                  user: Staff = Depends(require_roles("Admin"))):
     from utils import get_password_hash
     hashed = get_password_hash(staff.password)
@@ -157,8 +157,8 @@ def create_staff(staff: StaffCreate, db: Session = Depends(get_db),
     return new_staff
 
 # --- Inventory ---
-@router.post("/inventory/", response_model=Inventory)
-def add_inventory(item: InventoryCreate, db: Session = Depends(get_db),
+@router.post("/inventory/", response_model=schemas.Inventory)
+def add_inventory(item: schemas.InventoryCreate, db: Session = Depends(get_db),
                   user: Staff = Depends(require_roles("Admin"))):
     new_item = Inventory(**item.dict())
     db.add(new_item)
@@ -169,8 +169,8 @@ def add_inventory(item: InventoryCreate, db: Session = Depends(get_db),
     return new_item
 
 # --- Lab / Radiology ---
-@router.post("/lab_tests/", response_model=LabTest)
-def order_lab_test(test: LabTestCreate, db: Session = Depends(get_db),
+@router.post("/lab_tests/", response_model=schemas.LabTest)
+def order_lab_test(test: schemas.LabTestCreate, db: Session = Depends(get_db),
                    user: Staff = Depends(require_roles("Doctor"))):
     new_test = LabTest(**test.dict())
     db.add(new_test)
@@ -180,7 +180,7 @@ def order_lab_test(test: LabTestCreate, db: Session = Depends(get_db),
     log_action(user.id, f"Ordered lab test {new_test.id} for patient {test.patient_id}")
     return new_test
 
-@router.put("/lab_tests/{test_id}/result", response_model=LabTest)
+@router.put("/lab_tests/{test_id}/result", response_model=schemas.LabTest)
 def update_lab_result(test_id: int, result: str, db: Session = Depends(get_db),
                       user: Staff = Depends(require_roles("Lab Technician"))):
     test = db.query(LabTest).filter(LabTest.id == test_id).first()
@@ -211,7 +211,7 @@ def revenue_per_month(db: Session = Depends(get_db),
     return [{"month": int(month), "revenue": float(total)} for month, total in data]
 
 # --- JWT Login ---
-@router.post("/token", response_model=Token)
+@router.post("/token", response_model=schemas.Token)
 def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), 
                            db: Session = Depends(get_db)):
     user = db.query(Staff).filter(Staff.email == form_data.username).first()

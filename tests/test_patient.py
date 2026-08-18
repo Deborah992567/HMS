@@ -1,7 +1,13 @@
+import sys
+from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
+# ensure project root is on sys.path for imports when running tests
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.append(str(ROOT))
 
 from database import Base, get_db
 from main import app
@@ -12,7 +18,12 @@ SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 
 @pytest.fixture(scope="module")
 def test_app():
-    engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+    from sqlalchemy.pool import StaticPool
+    engine = create_engine(
+        SQLALCHEMY_DATABASE_URL,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     Base.metadata.create_all(bind=engine)
 
@@ -30,6 +41,7 @@ def test_app():
 
 def test_register_patient(test_app):
     client = test_app
+    # ensure endpoint reachable
     payload = {"name": "John Doe", "email": "john@example.com"}
     res = client.post("/api/patients/register", json=payload)
     assert res.status_code == 200
