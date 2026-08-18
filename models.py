@@ -15,6 +15,7 @@ class Patient(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=False)
+    hashed_password = Column(String, nullable=True)
     insurance_id = Column(Integer, ForeignKey("insurance.id"))
     insurance = relationship("Insurance", back_populates="patient", uselist=False)
     appointments = relationship("Appointment", back_populates="patient")
@@ -52,15 +53,24 @@ class Doctor(Base):
     specialty = Column(String)
     appointments = relationship("Appointment", back_populates="doctor")
 
+class Service(Base):
+    __tablename__ = "services"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False, unique=True)
+    description = Column(String, nullable=True)
+    duration_minutes = Column(Integer, default=30)
+
 class Appointment(Base):
     __tablename__ = "appointments"
     id = Column(Integer, primary_key=True)
     date = Column(DateTime)
     patient_id = Column(Integer, ForeignKey("patients.id"))
     doctor_id = Column(Integer, ForeignKey("doctors.id"))
+    service_id = Column(Integer, ForeignKey("services.id"), nullable=True)
     status = Column(String, default="scheduled")  # scheduled, cancelled, completed
     patient = relationship("Patient", back_populates="appointments")
     doctor = relationship("Doctor", back_populates="appointments")
+    service = relationship("Service")
 
 
 # --- Doctor Availability ---
@@ -160,4 +170,3 @@ class Consent(Base):
     revoked = Column(Boolean, default=False)
     timestamp = Column(DateTime)
     patient = relationship("Patient")
-

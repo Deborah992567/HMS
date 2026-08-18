@@ -27,6 +27,7 @@ const EmptyState = ({ message }) => <div className="empty-state">{message}</div>
 export default function App() {
   const [page, setPage] = useState('home')
   const [token, setToken] = useState(() => localStorage.getItem('hms_token'))
+  const [patientToken, setPatientToken] = useState(() => localStorage.getItem('hms_patient_token'))
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [patients, setPatients] = useState([])
@@ -35,6 +36,14 @@ export default function App() {
   const [receipts, setReceipts] = useState([])
   const [chain, setChain] = useState(null)
   const [billingId, setBillingId] = useState('')
+  const [doctors, setDoctors] = useState([])
+  const [services, setServices] = useState([])
+  const [appointmentDate, setAppointmentDate] = useState('')
+  const [doctorId, setDoctorId] = useState('')
+  const [serviceId, setServiceId] = useState('')
+  const [patientAppointments, setPatientAppointments] = useState([])
+  const [patientEmail, setPatientEmail] = useState('')
+  const [patientPassword, setPatientPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [toasts, setToasts] = useState([])
 
@@ -46,6 +55,7 @@ export default function App() {
   const loadPatients = async () => { setLoading(true); try { setPatients(await request('/patients/')); setPage('patients') } catch (error) { showToast(error.message, 'error') } finally { setLoading(false) } }
   const loadEhrs = async patient => { setLoading(true); try { setEhrs(await request(`/patients/${patient.id}/ehr`)); setSelectedPatient(patient); setPage('ehrs') } catch (error) { showToast(error.message, 'error') } finally { setLoading(false) } }
   const loadReceipts = async () => { setLoading(true); try { setReceipts(await request('/receipts/')); setPage('receipts') } catch (error) { showToast(error.message, 'error') } finally { setLoading(false) } }
+  const loadBookingData = async () => { setLoading(true); try { const [doctorData, serviceData] = await Promise.all([readResponse(await fetch(`${apiBase}/doctors/`)), readResponse(await fetch(`${apiBase}/services/`))]); setDoctors(doctorData); setServices(serviceData); if (patientToken) setPatientAppointments(await readResponse(await fetch(`${apiBase}/patient/appointments/`, { headers: { Authorization: `Bearer ${patientToken}` } }))); setPage('book') } catch (error) { showToast(error.message, 'error') } finally { setLoading(false) } }
 
   useEffect(() => { loadChain() }, [])
 
@@ -58,6 +68,17 @@ export default function App() {
     } catch (error) { showToast(error.message, 'error') }
   }
 
+  async function patientLogin(event) {
+    event.preventDefault()
+    try { const form = new URLSearchParams({ username: patientEmail, password: patientPassword }); const result = await readResponse(await fetch(`${apiBase}/patients/token`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: form })); localStorage.setItem('hms_patient_token', result.access_token); setPatientToken(result.access_token); setPatientPassword(''); showToast('Welcome to your patient portal.', 'success'); loadBookingData() } catch (error) { showToast(error.message, 'error') }
+  }
+
+  async function bookAppointment(event) {
+    event.preventDefault()
+    if (!patientToken) return showToast('Please sign in to book an appointment.', 'error')
+    try { await readResponse(await fetch(`${apiBase}/patient/appointments/`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${patientToken}` }, body: JSON.stringify({ date: appointmentDate, doctor_id: Number(doctorId), service_id: serviceId ? Number(serviceId) : null }) })); showToast('Appointment booked successfully.', 'success'); setAppointmentDate(''); loadBookingData() } catch (error) { showToast(error.message, 'error') }
+  }
+
   async function simulatePayment(event) {
     event.preventDefault()
     if (!billingId || Number(billingId) < 1) return showToast('Enter a valid billing ID.', 'error')
@@ -68,7 +89,7 @@ export default function App() {
     try { await request(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); showToast(message, 'success'); if (after) after() } catch (error) { showToast(error.message, 'error') }
   }
 
-  const navigate = next => { if (next === 'patients') return loadPatients(); if (next === 'receipts') return loadReceipts(); if (next === 'blockchain') { setPage(next); return loadChain() } setPage(next) }
+  const navigate = next => { if (next === 'patients') return loadPatients(); if (next === 'receipts') return loadReceipts(); if (next === 'book') return loadBookingData(); if (next === 'blockchain') { setPage(next); return loadChain() } setPage(next) }
   const logout = () => { localStorage.removeItem('hms_token'); setToken(null); setPage('home'); showToast('You have been signed out.') }
 
   return <div className="app-shell">
@@ -76,6 +97,7 @@ export default function App() {
     <main className="main-content">
       {page === 'home' && <section className="hero-grid"><div className="hero-copy"><p className="eyebrow">Connected care, simplified</p><h1>Hospital operations, all in one calm workspace.</h1><p className="lede">Manage patients, clinical records, payments and verifiable receipt history from a single secure dashboard.</p><div className="hero-actions"><button className="button primary" onClick={() => navigate(token ? 'patients' : 'register')}>{token ? 'Open patient directory' : 'Register a patient'}</button><button className="button secondary" onClick={() => navigate('blockchain')}>View audit chain</button></div></div><aside className="login-card"><p className="eyebrow">{token ? 'Session active' : 'Staff access'}</p>{token ? <><h2>Welcome back</h2><p>You can now access the patient, clinical and finance workspaces based on your assigned role.</p><button className="button primary full" onClick={() => navigate('patients')}>Go to patients</button></> : <form onSubmit={login}><h2>Sign in</h2><label>Work email<input required type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="name@hospital.com" /></label><label>Password<input required type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="••••••••" /></label><button className="button primary full" type="submit">Sign in securely</button><p className="form-note">New patient? <button type="button" className="text-button" onClick={() => navigate('register')}>Create a patient profile</button></p></form>}</aside></section>}
       {page === 'register' && <section className="page-section narrow"><div className="section-heading"><p className="eyebrow">Patient intake</p><h1>Create a patient profile</h1><p>Start a new patient record. Clinical staff can access it after signing in.</p></div><SignupForm apiBase={apiBase} onRegister={() => { showToast('Patient profile created.', 'success'); setPage('home') }} /></section>}
+      {page === 'book' && <section className="page-section"><div className="section-heading"><p className="eyebrow">Patient portal</p><h1>Book an appointment</h1><p>Choose the doctor, service and time that work best for you.</p></div>{!patientToken ? <article className="form-card" style={{maxWidth: 480}}><h2>Patient sign in</h2><form onSubmit={patientLogin}><label>Email<input required type="email" value={patientEmail} onChange={e => setPatientEmail(e.target.value)} placeholder="you@example.com" /></label><label>Password<input required type="password" value={patientPassword} onChange={e => setPatientPassword(e.target.value)} placeholder="Your password" /></label><button className="button primary full">Access appointments</button></form><p className="form-note">Need an account? <button className="text-button" onClick={() => navigate('register')}>Sign up as a patient</button></p></article> : <div className="record-layout"><article className="form-card"><h2>New appointment</h2><form onSubmit={bookAppointment}><label>Service<select required value={serviceId} onChange={e => setServiceId(e.target.value)}><option value="">Select a service</option>{services.map(service => <option key={service.id} value={service.id}>{service.name} · {service.duration_minutes} min</option>)}</select></label><label>Doctor<select required value={doctorId} onChange={e => setDoctorId(e.target.value)}><option value="">Choose a doctor</option>{doctors.map(doctor => <option key={doctor.id} value={doctor.id}>{doctor.name}{doctor.specialty ? ` — ${doctor.specialty}` : ''}</option>)}</select></label><label>Date and time<input required type="datetime-local" value={appointmentDate} onChange={e => setAppointmentDate(e.target.value)} /></label><button className="button primary full">Book appointment</button></form></article><div><h2>Your appointments</h2>{loading ? <EmptyState message="Loading booking options…" /> : patientAppointments.length ? patientAppointments.map(appointment => <article className="record-card" key={appointment.id}><span className="record-id">APPOINTMENT #{appointment.id}</span><h3>{new Date(appointment.date).toLocaleString()}</h3><p>Doctor #{appointment.doctor_id} · {appointment.status}</p></article>) : <EmptyState message="You have no upcoming appointments." />}</div></div>}</section>}
       {page === 'patients' && <section className="page-section"><div className="section-heading row"><div><p className="eyebrow">Patient directory</p><h1>Patients</h1><p>Select a patient to review their clinical record.</p></div><button className="button secondary" onClick={loadPatients}>Refresh</button></div>{loading ? <EmptyState message="Loading patients…" /> : patients.length ? <div className="data-grid">{patients.map(patient => <article className="patient-card" key={patient.id}><div className="avatar">{patient.name.slice(0, 1).toUpperCase()}</div><div><h3>{patient.name}</h3><p>{patient.email}</p><span>Patient #{patient.id}</span></div><button className="button secondary" onClick={() => loadEhrs(patient)}>Open record</button></article>)}</div> : <EmptyState message="No patients are available yet." />}</section>}
       {page === 'ehrs' && <section className="page-section"><div className="section-heading row"><div><p className="eyebrow">Clinical record</p><h1>{selectedPatient?.name || 'Patient'}’s EHR</h1><p>Patient #{selectedPatient?.id} · {ehrs.length} record{ehrs.length === 1 ? '' : 's'}</p></div><button className="button secondary" onClick={() => selectedPatient && loadEhrs(selectedPatient)}>Refresh</button></div><div className="record-layout"><div>{ehrs.length ? ehrs.map(record => <article className="record-card" key={record.id}><span className="record-id">RECORD #{record.id}</span><h3>{record.diagnosis}</h3><p><strong>Medication:</strong> {record.medication || 'Not recorded'}</p>{record.notes && <p className="notes">{record.notes}</p>}</article>) : <EmptyState message="No clinical records have been created for this patient." />}</div><aside className="form-card"><h2>New clinical record</h2><EHRForm onCreate={payload => submit('/ehr/', payload, 'Clinical record created.', () => selectedPatient && loadEhrs(selectedPatient))} /></aside></div></section>}
       {page === 'payments' && <section className="page-section"><div className="section-heading"><p className="eyebrow">Billing & care actions</p><h1>Payments and documentation</h1><p>Record a confirmed payment, issue a receipt, or add a prescription and consent record.</p></div><div className="workflow-grid"><article className="form-card"><h2>Simulate payment</h2><p className="card-copy">Marks the billing record paid and writes a confirmation to the local audit chain.</p><form onSubmit={simulatePayment}><label>Billing ID<input inputMode="numeric" value={billingId} onChange={event => setBillingId(event.target.value)} placeholder="e.g. 101" /></label><button className="button primary full" type="submit">Confirm payment</button></form></article><article className="form-card"><h2>Issue receipt</h2><Receipts onCreate={payload => submit('/receipts/', payload, 'Receipt created and anchored.', loadReceipts)} /></article><article className="form-card"><h2>Create prescription</h2><PrescriptionForm onCreate={payload => submit('/prescriptions/', payload, 'Prescription created.')} /></article><article className="form-card"><h2>Grant consent</h2><ConsentForm onCreate={payload => submit('/consents/', payload, 'Consent recorded.')} /></article></div></section>}

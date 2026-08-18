@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 from sqlalchemy.orm import Session
 from database import get_db
-from models import Patient, Doctor, Appointment, Billing, EHR, Staff, Role, Inventory, LabTest, Prescription, Consent, DoctorAvailability, Receipt, EHRVersion
+from models import Patient, Doctor, Appointment, Billing, EHR, Staff, Role, Inventory, LabTest, Prescription, Consent, DoctorAvailability, Receipt, EHRVersion, Service
 import schemas
-from utils import create_payment_intent, require_roles, get_current_user, verify_password, create_access_token
+from utils import create_payment_intent, require_roles, get_current_user, get_current_patient, get_password_hash, verify_password, create_access_token
 from hms_logging import log_action
 
 from fastapi.security import OAuth2PasswordRequestForm
@@ -97,7 +97,9 @@ def create_patient(patient: schemas.PatientCreate, db: Session = Depends(get_db)
 # Public patient registration
 @router.post("/patients/register", response_model=schemas.Patient)
 def register_patient(patient: schemas.PatientCreate, db: Session = Depends(get_db)):
-    new_patient = Patient(name=patient.name, email=patient.email)
+    if db.query(Patient).filter(Patient.email == patient.email).first():
+        raise HTTPException(status_code=409, detail="An account already exists for this email")
+    new_patient = Patient(name=patient.name, email=patient.email, hashed_password=get_password_hash(patient.password) if patient.password else None)
     # handle basic insurance creation if provided
     if patient.insurance_provider or patient.insurance_policy_number:
         from models import Insurance
@@ -111,6 +113,13 @@ def register_patient(patient: schemas.PatientCreate, db: Session = Depends(get_d
     db.commit()
     db.refresh(new_patient)
     return new_patient
+
+@router.post("/patients/token", response_model=schemas.Token)
+def patient_login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    patient = db.query(Patient).filter(Patient.email == form_data.username).first()
+    if not patient or not patient.hashed_password or not verify_password(form_data.password, patient.hashed_password):
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
+    return {"access_token": create_access_token({"patient_id": patient.id, "account_type": "patient"}), "token_type": "bearer"}
 
 
 @router.get("/patients/", response_model=List[schemas.Patient])
@@ -140,6 +149,24 @@ def create_appointment(appt: schemas.AppointmentCreate, db: Session = Depends(ge
 
     log_action(user.id, f"Created appointment {new_appt.id} for patient {appt.patient_id} with doctor {appt.doctor_id}")
     return new_appt
+
+@router.post("/patient/appointments/", response_model=schemas.Appointment)
+def book_patient_appointment(appt: schemas.PatientAppointmentCreate, db: Session = Depends(get_db), patient: Patient = Depends(get_current_patient)):
+    if not db.query(Doctor).filter(Doctor.id == appt.doctor_id).first():
+        raise HTTPException(status_code=404, detail="Doctor not found")
+    if appt.service_id and not db.query(Service).filter(Service.id == appt.service_id).first():
+        raise HTTPException(status_code=404, detail="Service not found")
+    if not is_doctor_available(db, appt.doctor_id, appt.date):
+        raise HTTPException(status_code=400, detail="Doctor is not available at this time")
+    if not is_patient_available(db, patient.id, appt.date):
+        raise HTTPException(status_code=400, detail="You already have an appointment at this time")
+    booking = Appointment(patient_id=patient.id, doctor_id=appt.doctor_id, service_id=appt.service_id, date=appt.date)
+    db.add(booking); db.commit(); db.refresh(booking)
+    return booking
+
+@router.get("/patient/appointments/", response_model=List[schemas.Appointment])
+def list_patient_appointments(db: Session = Depends(get_db), patient: Patient = Depends(get_current_patient)):
+    return db.query(Appointment).filter(Appointment.patient_id == patient.id).order_by(Appointment.date.desc()).all()
 
 
 @router.get("/appointments/", response_model=List[schemas.Appointment])
@@ -423,9 +450,19 @@ def create_doctor(doctor: schemas.DoctorCreate, db: Session = Depends(get_db),
 
 
 @router.get("/doctors/", response_model=List[schemas.Doctor])
-def list_doctors(db: Session = Depends(get_db), user: Staff = Depends(require_roles("Reception", "Doctor", "Admin"))):
+def list_doctors(db: Session = Depends(get_db)):
     docs = db.query(Doctor).all()
     return docs
+
+@router.get("/services/", response_model=List[schemas.Service])
+def list_services(db: Session = Depends(get_db)):
+    return db.query(Service).order_by(Service.name.asc()).all()
+
+@router.post("/services/", response_model=schemas.Service)
+def create_service(service: schemas.ServiceCreate, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Admin"))):
+    new_service = Service(**service.dict())
+    db.add(new_service); db.commit(); db.refresh(new_service)
+    return new_service
 
 
 @router.get("/doctors/{doc_id}", response_model=schemas.Doctor)

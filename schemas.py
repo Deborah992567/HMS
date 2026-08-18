@@ -19,6 +19,7 @@ class PatientBase(BaseModel):
     email: EmailStr
 
 class PatientCreate(PatientBase):
+    password: Optional[str] = None
     insurance_provider: Optional[str] = None
     insurance_policy_number: Optional[str] = None
 
@@ -39,6 +40,25 @@ class AppointmentCreate(AppointmentBase):
 class Appointment(AppointmentBase):
     id: int
     status: Optional[str] = "scheduled"
+    service_id: Optional[int] = None
+    class Config:
+        orm_mode = True
+
+class PatientAppointmentCreate(BaseModel):
+    date: datetime
+    doctor_id: int
+    service_id: Optional[int] = None
+
+class ServiceBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    duration_minutes: int = 30
+
+class ServiceCreate(ServiceBase):
+    pass
+
+class Service(ServiceBase):
+    id: int
     class Config:
         orm_mode = True
 
