@@ -6,3 +6,5 @@ passlib[bcrypt]
 python-jose
 stripe
 cryptography
+pytest
+httpx
