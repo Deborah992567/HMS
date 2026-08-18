@@ -8,6 +8,13 @@ from cryptography.fernet import Fernet
 
 
 class Blockchain:
+    """
+    Simple in-app Proof-of-Work blockchain with Fernet payload encryption.
+
+    - Fully self-contained: no external APIs or network calls.
+    - Anchors are persisted locally to `anchors.json`.
+    - Use `BLOCKCHAIN_KEY` environment variable to set a stable Fernet key.
+    """
     def __init__(self, key: Optional[bytes] = None):
         self.chain: List[Dict[str, Any]] = []
         self.current_transactions: List[Dict[str, Any]] = []
@@ -155,6 +162,35 @@ class Blockchain:
             pass
 
         return anchor
+
+    def get_anchors(self) -> List[Dict[str, Any]]:
+        """Return the list of locally persisted anchors."""
+        return self._load_anchors()
+
+    def get_block(self, index: int) -> Dict[str, Any]:
+        """Return a block by 1-based `index`. Raises IndexError if out of range."""
+        if index - 1 < 0 or index > len(self.chain):
+            raise IndexError("block index out of range")
+        return self.chain[index - 1]
+
+    def mine_block(self, miner_address: str = "miner") -> Dict[str, Any]:
+        """Mine (find proof) for the current transactions, reward the miner, and
+        append a new block to the chain. Returns the newly created block.
+
+        This is a local-only mining operation — no networking or external APIs.
+        """
+        # reward miner with a simple coinbase transaction
+        try:
+            self.new_transaction(sender="0", recipient=miner_address, amount=1)
+        except Exception:
+            # non-fatal if transaction cannot be added
+            pass
+
+        last_proof = self.last_block['proof']
+        proof = self.proof_of_work(last_proof)
+        previous_hash = self.hash(self.last_block)
+        block = self.new_block(proof, previous_hash)
+        return block
 
     def get_chain(self) -> Dict[str, Any]:
         return {'chain': self.chain, 'length': len(self.chain)}

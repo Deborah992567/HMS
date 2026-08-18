@@ -22,6 +22,9 @@ function App(){
   const [password, setPassword] = useState('')
   const [patients, setPatients] = useState([])
   const [ehrs, setEhrs] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [receipts, setReceipts] = useState([])
 
   useEffect(()=>{ loadChain() }, [])
 
@@ -38,8 +41,14 @@ function App(){
   }
 
   async function loadChain(){
-    const res = await fetch(`${apiBase}/blockchain/chain`)
-    setChain(await res.json())
+    try{
+      setError(null)
+      setLoading(true)
+      const res = await fetch(`${apiBase}/blockchain/chain`)
+      if(!res.ok) throw new Error('Failed to load chain')
+      setChain(await res.json())
+    }catch(err){ setError(err.message) }
+    finally{ setLoading(false) }
   }
 
   async function simulatePayment(e){
@@ -52,15 +61,39 @@ function App(){
   }
 
   async function loadPatients(){
-    const res = await apiFetch('/patients/')
-    if(res.ok) setPatients(await res.json())
-    setPage('patients')
+    try{
+      setError(null)
+      setLoading(true)
+      const res = await apiFetch('/patients/')
+      if(!res.ok) throw new Error('Failed to load patients')
+      setPatients(await res.json())
+      setPage('patients')
+    }catch(err){ setError(err.message) }
+    finally{ setLoading(false) }
   }
 
   async function loadEHRs(patientId){
-    const res = await apiFetch(`/patients/${patientId}/ehr`)
-    if(res.ok) setEhrs(await res.json())
-    setPage('ehrs')
+    try{
+      setError(null)
+      setLoading(true)
+      const res = await apiFetch(`/patients/${patientId}/ehr`)
+      if(!res.ok) throw new Error('Failed to load EHRs')
+      setEhrs(await res.json())
+      setPage('ehrs')
+    }catch(err){ setError(err.message) }
+    finally{ setLoading(false) }
+  }
+
+  async function loadReceipts(){
+    try{
+      setError(null)
+      setLoading(true)
+      const res = await apiFetch('/receipts/')
+      if(!res.ok) throw new Error('Failed to load receipts')
+      setReceipts(await res.json())
+      setPage('receipts')
+    }catch(err){ setError(err.message) }
+    finally{ setLoading(false) }
   }
 
   function logout(){ localStorage.removeItem('token'); alert('Logged out') }
@@ -83,9 +116,12 @@ function App(){
       {page === 'patients' && (
         <section>
           <h2>Patients</h2>
-          <ul>
-            {patients.map(p=> (<li key={p.id}>{p.name} — <button onClick={()=>loadEHRs(p.id)}>View EHRs</button></li>))}
-          </ul>
+          {loading ? <p>Loading patients...</p> : (
+            <ul>
+              {patients.map(p=> (<li key={p.id}>{p.name} — <button onClick={()=>loadEHRs(p.id)}>View EHRs</button></li>))}
+            </ul>
+          )}
+          {error && <p style={{color:'red'}}>{error}</p>}
         </section>
       )}
 
@@ -129,7 +165,8 @@ function App(){
       {page === 'blockchain' && (
         <section>
           <h2>Blockchain</h2>
-          <pre>{chain ? JSON.stringify(chain, null, 2) : 'Loading...'}</pre>
+          {loading ? <p>Loading chain...</p> : <pre>{chain ? JSON.stringify(chain, null, 2) : 'No chain'}</pre>}
+          {error && <p style={{color:'red'}}>{error}</p>}
           <button onClick={loadChain}>Refresh Chain</button>
         </section>
       )}
@@ -137,7 +174,15 @@ function App(){
       {page === 'receipts' && (
         <section>
           <h2>Receipts</h2>
-          <p>Use the API directly to create/list receipts.</p>
+          <button onClick={loadReceipts}>Refresh Receipts</button>
+          {loading ? <p>Loading...</p> : (
+            <ul>
+              {receipts.map(r=> (
+                <li key={r.id}>{r.billing_id} — ${r.amount} — anchor: {r.anchor_id || 'n/a'}</li>
+              ))}
+            </ul>
+          )}
+          {error && <p style={{color:'red'}}>{error}</p>}
         </section>
       )}
 
