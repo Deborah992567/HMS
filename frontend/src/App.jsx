@@ -5,6 +5,7 @@ import PrescriptionForm from './components/PrescriptionForm'
 import ConsentForm from './components/ConsentForm'
 import Receipts from './components/Receipts'
 import Toasts from './components/Toasts'
+import SignupForm from './components/SignupForm'
 
 const apiBase = import.meta.env.VITE_API_BASE || '/api'
 
@@ -119,6 +120,12 @@ function App(){
             <input placeholder="password" type="password" value={password} onChange={e=>setPassword(e.target.value)} className="w-full p-2 border rounded" />
             <button type="submit" className="bg-blue-600 text-white px-3 py-1 rounded">Login</button>
           </form>
+        </section>
+      )}
+
+      {page === 'register' && (
+        <section>
+          <SignupForm onRegister={(p)=>{ showToast('Registered successfully', 'success'); setPage('home') }} />
         </section>
       )}
 
