@@ -1,17 +1,7 @@
 import React from 'react'
 
-export default function Header({onNav}){
-  return (
-    <header className="flex justify-between items-center">
-      <h1 className="m-0 text-xl font-semibold">HMS</h1>
-      <nav className="space-x-2">
-        <button className="px-2 py-1 rounded hover:bg-slate-100" onClick={()=>onNav('home')}>Home</button>
-        <button className="px-2 py-1 rounded hover:bg-slate-100" onClick={()=>onNav('patients')}>Patients</button>
-        <button className="px-2 py-1 rounded hover:bg-slate-100" onClick={()=>onNav('blockchain')}>Blockchain</button>
-        <button className="px-2 py-1 rounded hover:bg-slate-100" onClick={()=>onNav('payments')}>Payments</button>
-        <button className="px-2 py-1 rounded hover:bg-slate-100" onClick={()=>onNav('receipts')}>Receipts</button>
-        <button className="px-2 py-1 rounded hover:bg-slate-100" onClick={()=>onNav('register')}>Register</button>
-      </nav>
-    </header>
-  )
+const items = [['home', 'Overview'], ['patients', 'Patients'], ['payments', 'Care & billing'], ['receipts', 'Receipts'], ['blockchain', 'Audit trail']]
+
+export default function Header({ page, signedIn, onNav, onLogout }) {
+  return <header className="topbar"><button className="brand" onClick={() => onNav('home')} aria-label="HMS home"><span className="brand-mark">+</span><span>care<span>flow</span></span></button><nav>{items.map(([key, label]) => <button key={key} className={page === key ? 'active' : ''} onClick={() => onNav(key)}>{label}</button>)}</nav><div className="header-action">{signedIn ? <button className="button subtle" onClick={onLogout}>Sign out</button> : <button className="button primary" onClick={() => onNav('home')}>Staff sign in</button>}</div></header>
 }

@@ -1,7 +1,7 @@
 import React, {useState} from 'react'
 import FormField from './FormField'
 
-export default function SignupForm({onRegister}){
+export default function SignupForm({onRegister, apiBase='/api'}){
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [errors, setErrors] = useState({})
@@ -19,7 +19,7 @@ export default function SignupForm({onRegister}){
     setErrors(e)
     if(Object.keys(e).length) return
     try{
-      const res = await fetch('/api/patients/register', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name, email})})
+      const res = await fetch(`${apiBase}/patients/register`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name, email})})
       if(!res.ok) throw new Error('Registration failed')
       const body = await res.json()
       setName(''); setEmail('')

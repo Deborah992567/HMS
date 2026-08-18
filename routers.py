@@ -112,6 +112,12 @@ def register_patient(patient: schemas.PatientCreate, db: Session = Depends(get_d
     db.refresh(new_patient)
     return new_patient
 
+
+@router.get("/patients/", response_model=List[schemas.Patient])
+def list_patients(db: Session = Depends(get_db), user: Staff = Depends(require_roles("Reception", "Doctor", "Admin"))):
+    """Return the patient directory for authenticated clinical staff."""
+    return db.query(Patient).order_by(Patient.name.asc()).all()
+
 # --- Appointments ---
 def is_doctor_available(db: Session, doctor_id: int, date):
     return not db.query(Appointment).filter(Appointment.doctor_id==doctor_id, Appointment.date==date).first()
