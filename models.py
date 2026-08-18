@@ -109,3 +109,29 @@ class LabTest(Base):
     status = Column(String, default="pending")  # pending, completed
     patient = relationship("Patient", back_populates="lab_tests")
 
+
+# --- Prescriptions ---
+class Prescription(Base):
+    __tablename__ = "prescriptions"
+    id = Column(Integer, primary_key=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"))
+    doctor_id = Column(Integer, ForeignKey("doctors.id"))
+    medication = Column(String)
+    dosage = Column(String)
+    instructions = Column(String)
+    fulfilled = Column(Boolean, default=False)
+    patient = relationship("Patient")
+    doctor = relationship("Doctor")
+
+
+# --- Consent ---
+class Consent(Base):
+    __tablename__ = "consents"
+    id = Column(Integer, primary_key=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"))
+    granted_to = Column(String)  # e.g., 'research', 'provider:123'
+    scope = Column(String)  # brief description
+    revoked = Column(Boolean, default=False)
+    timestamp = Column(DateTime)
+    patient = relationship("Patient")
+

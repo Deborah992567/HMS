@@ -158,3 +158,38 @@ class LabTest(LabTestBase):
     status: str
     class Config:
         orm_mode = True
+
+
+# --- Prescription ---
+class PrescriptionBase(BaseModel):
+    patient_id: int
+    doctor_id: int
+    medication: str
+    dosage: str
+    instructions: str
+
+class PrescriptionCreate(PrescriptionBase):
+    pass
+
+class Prescription(PrescriptionBase):
+    id: int
+    fulfilled: bool
+    class Config:
+        orm_mode = True
+
+
+# --- Consent ---
+class ConsentBase(BaseModel):
+    patient_id: int
+    granted_to: str
+    scope: str
+
+class ConsentCreate(ConsentBase):
+    pass
+
+class Consent(ConsentBase):
+    id: int
+    revoked: bool
+    timestamp: datetime
+    class Config:
+        orm_mode = True

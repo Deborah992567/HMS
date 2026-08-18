@@ -16,3 +16,7 @@
 2026-08-18 12:55:18,941 - INFO - User 1 performed action: Created EHR 1 for patient 1
 2026-08-18 12:55:54,566 - INFO - User 1 performed action: Created EHR 1 for patient 1
 2026-08-18 12:56:15,648 - INFO - User 1 performed action: Created EHR 1 for patient 1
+2026-08-18 12:59:29,893 - INFO - User 1 performed action: Created prescription 1 for patient 1
+2026-08-18 12:59:29,926 - INFO - User 2 performed action: Fulfilled prescription 1
+2026-08-18 12:59:30,204 - INFO - User 1 performed action: Granted consent 1 for patient 1
+2026-08-18 12:59:30,211 - INFO - User 1 performed action: Revoked consent 1

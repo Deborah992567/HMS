@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 from sqlalchemy.orm import Session
 from database import get_db
-from models import Patient, Doctor, Appointment, Billing, EHR, Staff, Role, Inventory, LabTest
+from models import Patient, Doctor, Appointment, Billing, EHR, Staff, Role, Inventory, LabTest, Prescription, Consent, DoctorAvailability
 import schemas
 from utils import create_payment_intent, require_roles, get_current_user, verify_password, create_access_token
 from hms_logging import log_action
@@ -18,6 +18,68 @@ from datetime import datetime, timedelta
 from utils import create_access_token
 
 router = APIRouter()
+
+# --- Prescriptions ---
+@router.post("/prescriptions/", response_model=schemas.Prescription)
+def create_prescription(p: schemas.PrescriptionCreate, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Doctor"))):
+    new = Prescription(**p.dict())
+    db.add(new)
+    db.commit()
+    db.refresh(new)
+    log_action(user.id, f"Created prescription {new.id} for patient {p.patient_id}")
+    return new
+
+
+@router.get("/prescriptions/", response_model=List[schemas.Prescription])
+def list_prescriptions(patient_id: int = None, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Doctor", "Admin", "Reception"))):
+    q = db.query(Prescription)
+    if patient_id:
+        q = q.filter(Prescription.patient_id == patient_id)
+    return q.all()
+
+
+@router.post("/prescriptions/{presc_id}/fulfill")
+def fulfill_prescription(presc_id: int, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Reception", "Pharmacist", "Admin"))):
+    presc = db.query(Prescription).filter(Prescription.id == presc_id).first()
+    if not presc: raise HTTPException(status_code=404, detail="Prescription not found")
+    presc.fulfilled = True
+    db.commit()
+    db.refresh(presc)
+    log_action(user.id, f"Fulfilled prescription {presc_id}")
+    return presc
+
+
+# --- Consent management ---
+@router.post("/consents/", response_model=schemas.Consent)
+def grant_consent(c: schemas.ConsentCreate, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Admin", "Reception", "Doctor"))):
+    new = Consent(patient_id=c.patient_id, granted_to=c.granted_to, scope=c.scope, revoked=False, timestamp=datetime.utcnow())
+    db.add(new)
+    db.commit()
+    db.refresh(new)
+
+    # record consent on lightweight blockchain (encrypted)
+    try:
+        blockchain.new_transaction(sender=str(user.id), recipient=str(c.patient_id), amount=0, data={"type": "consent", "consent_id": new.id, "granted_to": c.granted_to})
+    except Exception:
+        pass
+
+    log_action(user.id, f"Granted consent {new.id} for patient {c.patient_id}")
+    return new
+
+
+@router.post("/consents/{consent_id}/revoke")
+def revoke_consent(consent_id: int, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Admin", "Doctor"))):
+    cons = db.query(Consent).filter(Consent.id == consent_id).first()
+    if not cons: raise HTTPException(status_code=404, detail="Consent not found")
+    cons.revoked = True
+    db.commit()
+    db.refresh(cons)
+    try:
+        blockchain.new_transaction(sender=str(user.id), recipient=str(cons.patient_id), amount=0, data={"type": "consent_revoke", "consent_id": cons.id})
+    except Exception:
+        pass
+    log_action(user.id, f"Revoked consent {consent_id}")
+    return cons
 
 # --- Patients ---
 @router.post("/patients/", response_model=schemas.Patient)
