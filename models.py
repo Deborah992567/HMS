@@ -58,8 +58,19 @@ class Appointment(Base):
     date = Column(DateTime)
     patient_id = Column(Integer, ForeignKey("patients.id"))
     doctor_id = Column(Integer, ForeignKey("doctors.id"))
+    status = Column(String, default="scheduled")  # scheduled, cancelled, completed
     patient = relationship("Patient", back_populates="appointments")
     doctor = relationship("Doctor", back_populates="appointments")
+
+
+# --- Doctor Availability ---
+class DoctorAvailability(Base):
+    __tablename__ = "doctor_availability"
+    id = Column(Integer, primary_key=True)
+    doctor_id = Column(Integer, ForeignKey("doctors.id"))
+    start_time = Column(DateTime)
+    end_time = Column(DateTime)
+    doctor = relationship("Doctor")
 
 # --- Billing & Payments ---
 class Billing(Base):

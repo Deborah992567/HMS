@@ -38,6 +38,21 @@ class AppointmentCreate(AppointmentBase):
 
 class Appointment(AppointmentBase):
     id: int
+    status: Optional[str] = "scheduled"
+    class Config:
+        orm_mode = True
+
+# Doctor Availability
+class DoctorAvailabilityBase(BaseModel):
+    doctor_id: int
+    start_time: datetime
+    end_time: datetime
+
+class DoctorAvailabilityCreate(DoctorAvailabilityBase):
+    pass
+
+class DoctorAvailability(DoctorAvailabilityBase):
+    id: int
     class Config:
         orm_mode = True
 

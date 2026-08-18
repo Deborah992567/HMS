@@ -73,6 +73,45 @@ def create_appointment(appt: schemas.AppointmentCreate, db: Session = Depends(ge
     log_action(user.id, f"Created appointment {new_appt.id} for patient {appt.patient_id} with doctor {appt.doctor_id}")
     return new_appt
 
+
+@router.get("/appointments/", response_model=List[schemas.Appointment])
+def list_appointments(patient_id: int = None, doctor_id: int = None, db: Session = Depends(get_db), user: Staff = Depends(get_current_user)):
+    q = db.query(Appointment)
+    if patient_id:
+        q = q.filter(Appointment.patient_id == patient_id)
+    if doctor_id:
+        q = q.filter(Appointment.doctor_id == doctor_id)
+    return q.all()
+
+
+@router.put("/appointments/{appt_id}/cancel", response_model=schemas.Appointment)
+def cancel_appointment(appt_id: int, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Reception", "Doctor", "Admin"))):
+    appt = db.query(Appointment).filter(Appointment.id == appt_id).first()
+    if not appt: raise HTTPException(status_code=404, detail="Appointment not found")
+    appt.status = "cancelled"
+    db.commit()
+    db.refresh(appt)
+    log_action(user.id, f"Cancelled appointment {appt_id}")
+    return appt
+
+
+@router.post("/doctors/{doc_id}/availability", response_model=schemas.DoctorAvailability)
+def set_doctor_availability(doc_id: int, avail: schemas.DoctorAvailabilityCreate, db: Session = Depends(get_db), user: Staff = Depends(require_roles("Admin", "Doctor"))):
+    from models import DoctorAvailability
+    new = DoctorAvailability(doctor_id=doc_id, start_time=avail.start_time, end_time=avail.end_time)
+    db.add(new)
+    db.commit()
+    db.refresh(new)
+    log_action(user.id, f"Set availability for doctor {doc_id}")
+    return new
+
+
+@router.get("/doctors/{doc_id}/availability", response_model=List[schemas.DoctorAvailability])
+def get_doctor_availability(doc_id: int, db: Session = Depends(get_db), user: Staff = Depends(get_current_user)):
+    from models import DoctorAvailability
+    entries = db.query(DoctorAvailability).filter(DoctorAvailability.doctor_id == doc_id).all()
+    return entries
+
 # --- Billing ---
 @router.post("/billing/", response_model=schemas.Billing)
 def create_bill(bill: schemas.BillingCreate, db: Session = Depends(get_db),
