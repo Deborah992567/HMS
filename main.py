@@ -5,6 +5,7 @@ import os
 
 from routers import router
 from database import Base, engine
+from sqlalchemy import inspect, text
 
 # Create the app and register API routes before mounting static files
 app = FastAPI(title="Hospital Management System")
@@ -17,6 +18,20 @@ def create_database_tables():
     and replace this with migrations when they are introduced.
     """
     Base.metadata.create_all(bind=engine)
+    # Keep local/demo databases created before the patient portal compatible.
+    # SQLAlchemy's create_all creates missing tables but intentionally never
+    # changes existing ones, so add these non-destructive nullable columns.
+    inspector = inspect(engine)
+    upgrades = {
+        "patients": {"hashed_password": "VARCHAR"},
+        "appointments": {"service_id": "INTEGER"},
+    }
+    with engine.begin() as connection:
+        for table, columns in upgrades.items():
+            existing = {column["name"] for column in inspector.get_columns(table)}
+            for column, definition in columns.items():
+                if column not in existing:
+                    connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}"))
 
 # Namespace API under /api so static files don't conflict with API routes
 app.include_router(router, prefix="/api")

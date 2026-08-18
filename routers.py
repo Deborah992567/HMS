@@ -97,7 +97,16 @@ def create_patient(patient: schemas.PatientCreate, db: Session = Depends(get_db)
 # Public patient registration
 @router.post("/patients/register", response_model=schemas.Patient)
 def register_patient(patient: schemas.PatientCreate, db: Session = Depends(get_db)):
-    if db.query(Patient).filter(Patient.email == patient.email).first():
+    existing_patient = db.query(Patient).filter(Patient.email == patient.email).first()
+    if existing_patient:
+        # Patient profiles created before portal access did not have credentials.
+        # Let their first portal sign-up activate that existing profile, without
+        # creating a duplicate clinical record.
+        if not existing_patient.hashed_password and patient.password:
+            existing_patient.hashed_password = get_password_hash(patient.password)
+            db.commit()
+            db.refresh(existing_patient)
+            return existing_patient
         raise HTTPException(status_code=409, detail="An account already exists for this email")
     new_patient = Patient(name=patient.name, email=patient.email, hashed_password=get_password_hash(patient.password) if patient.password else None)
     # handle basic insurance creation if provided
